@@ -1,0 +1,23 @@
+name: dvgs
+
+channels: 
+  - conda-forge
+  - pytorch
+  - nvidia
+  
+dependencies:
+  - python=3.9
+  - numpy
+  - pandas
+  - matplotlib
+  - seaborn
+  - h5py
+  - pytorch=1.11
+  - pytorch-cuda=11.7
+  - cudatoolkit=11.3
+  - ipykernel
+  - umap-learn
+  - statsmodels
+  - pip
+  - pip:
+    - tensorboardconda
