@@ -21,7 +21,8 @@ class NN(torch.nn.Module):
             
         # output layer
         if norm: seq.append(torch.nn.BatchNorm1d(hidden_channels))
-        seq.append(torch.nn.Linear(hidden_channels, out_channels, bias=bias))
+        seq.append(torch.nn.Linear(hidden_channels, 10, bias=bias))
+        seq.append(torch.nn.Linear(10, out_channels, bias=bias))
 
         if out_fn is not None:
             # softmax, sigmoid, etc 
