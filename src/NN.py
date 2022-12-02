@@ -7,26 +7,31 @@ class NN(torch.nn.Module):
         super().__init__()
 
         seq = []
+        norm = torch.nn.InstanceNorm1d
 
         # first layer 
-        seq.append(torch.nn.Linear(in_channels, hidden_channels, bias=bias))
+        if in_channels is not None: 
+            seq.append(torch.nn.Linear(in_channels, hidden_channels, bias=bias))
+        else: 
+            seq.append(torch.nn.LazyLinear(hidden_channels, bias=bias))
+
         seq.append(torch.nn.Dropout(dropout))
         seq.append(act())
 
         for l in range(num_layers - 1): 
-            if norm: seq.append(torch.nn.BatchNorm1d(hidden_channels))
+            if norm: seq.append(norm(hidden_channels))
             seq.append(torch.nn.Linear(hidden_channels, hidden_channels, bias=bias))
             seq.append(torch.nn.Dropout(dropout))
             seq.append(act())
             
         # output layer
-        if norm: seq.append(torch.nn.BatchNorm1d(hidden_channels))
+        if norm: seq.append(norm(hidden_channels))
         seq.append(torch.nn.Linear(hidden_channels, 10, bias=bias))
         seq.append(torch.nn.Linear(10, out_channels, bias=bias))
 
         if out_fn is not None:
             # softmax, sigmoid, etc 
-            seq.append(out_fn())
+            seq.append(out_fn)
 
         self.f = torch.nn.Sequential(*seq)
 

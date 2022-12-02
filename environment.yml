@@ -12,9 +12,9 @@ dependencies:
   - matplotlib
   - seaborn
   - h5py
-  - pytorch
-  - pytorch-cuda=11.7
-  - cudatoolkit
+  - pytorch::pytorch=1.13
+  - nvidia::pytorch-cuda=11.7
+  - torchvision
   - ipykernel
   - umap-learn
   - statsmodels
