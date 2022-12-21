@@ -5,8 +5,6 @@ class CNN(torch.nn.Module):
     def __init__(self, in_conv, out_conv, out_channels, kernel_size, hidden_channels, norm=True, dropout=0., bias=True, act=torch.nn.ReLU, out_fn=None): 
         ''''''
         super().__init__()
-
-
         self.conv = torch.nn.Sequential(torch.nn.Conv2d(in_conv, out_conv, kernel_size), 
                                         act(),
                                         torch.nn.MaxPool2d(2,2),
@@ -29,11 +27,15 @@ class CNN(torch.nn.Module):
             for layer in self.f.children():
                 weights_init(layer, gain=gain)
 
-    def forward(self, x): 
+    def forward(self, x, y=None): 
+
         out = self.conv(x)
         out = torch.flatten(out, 1)
+        if y is not None: 
+            out = torch.cat((out, y), dim=1)
         out = self.fc(out)
         return out
+            
 
     def freeze_conv_layer(self): 
         for n,p in self.conv.state_dict().items(): 

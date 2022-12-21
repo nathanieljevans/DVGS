@@ -3,14 +3,14 @@ import torch
 from NN import NN
 
 class AE(torch.nn.Module):
-    def __init__(self, in_channels, latent_channels, num_layers=1, norm=True, dropout=0., bias=True, act=torch.nn.ReLU): 
+    def __init__(self, in_channels, hidden_channels, latent_channels, num_layers=1, norm=True, dropout=0., bias=True, act=torch.nn.ReLU): 
         ''''''
         super().__init__()
 
         self.encoder = NN(in_channels=in_channels, 
                             out_channels=latent_channels, 
                             num_layers=num_layers, 
-                            hidden_channels=in_channels,
+                            hidden_channels=hidden_channels,
                             dropout=dropout,
                             norm=norm, 
                             bias=bias, 
@@ -20,7 +20,7 @@ class AE(torch.nn.Module):
         self.decoder = NN(in_channels=latent_channels, 
                             out_channels=in_channels, 
                             num_layers=num_layers, 
-                            hidden_channels=in_channels,
+                            hidden_channels=hidden_channels,
                             dropout=dropout,
                             norm=norm, 
                             bias=bias, 

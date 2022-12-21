@@ -34,7 +34,7 @@ from sklearn import preprocessing
 
 
 
-def load_tabular_data(data_name, dict_no, noise_rate):
+def load_tabular_data(data_name, dict_no, noise_rate, out='../data/adult/'):
   """Loads Adult Income and Blog Feedback datasets.
   This module loads the two tabular datasets and saves train.csv, valid.csv and
   test.csv files under data_files directory.
@@ -171,120 +171,19 @@ def load_tabular_data(data_name, dict_no, noise_rate):
   train['Y'] = y_train
 
   # Saves data
-  if not os.path.exists('data_files'):
-    os.makedirs('data_files')
+  if not os.path.exists(out):
+    os.makedirs(out)
 
-  train.to_csv('./data_files/train.csv', index=False)
-  valid.to_csv('./data_files/valid.csv', index=False)
-  test.to_csv('./data_files/test.csv', index=False)
+  train.to_csv(f'{out}/train.csv', index=False)
+  valid.to_csv(f'{out}/valid.csv', index=False)
+  test.to_csv(f'{out}/test.csv', index=False)
 
   # Returns indices of noisy samples
   return noise_idx
 
 
-def load_rossmann_data(dict_no, setting, test_store_type):
-  """Loads Rossmann data.
-  This module loads Rossmann data for a domain adaptation application.
-  Rossmann data link: https://www.kaggle.com/c/rossmann-store-sales
-  The users should download 'rossmann-store-sales.zip' from the above link and
-  save it in './data_files/' directory
-  Args:
-    dict_no: the number of source and valid samples
-    setting: 'train-on-all', 'train-on-rest', or 'train-on-specific'
-    test_store_type: 'A', 'B', 'C', or 'D'
-  """
 
-  # Loads datasets
-  zip_file = zipfile.ZipFile('./data_files/rossmann-store-sales.zip')
-  train_data = pd.read_csv(zip_file.open('train.csv'))
-  store_data = pd.read_csv(zip_file.open('store.csv'))
-
-  # Extracts features
-  train_data = train_data[['Store', 'Sales', 'DayOfWeek', 'Customers', 'Open',
-                           'Promo', 'StateHoliday', 'SchoolHoliday']]
-  store_data = store_data[['Store', 'StoreType', 'Assortment',
-                           'CompetitionDistance', 'CompetitionOpenSinceMonth',
-                           'Promo2', 'Promo2SinceWeek']]
-
-  # Data preprocessing
-  # Fill na to 0
-  store_data = store_data.fillna(0)
-  # Converts string to int
-  train_data['StateHoliday'] = train_data['StateHoliday'].replace(['a', 'b',
-                                                                   'c'], 1)
-
-  # One-hot encoding
-  store_data = pd.get_dummies(store_data)
-
-  # Combines store data and train data
-  data_x = pd.merge(train_data, store_data, on='Store')
-
-  # Removes the samples when close
-  remove_idx = data_x.index[data_x['Sales'] == 0].tolist()
-  data_x = data_x.drop(remove_idx, axis=0)
-
-  # Renames target variable to 'Y'
-  data_x = data_x.rename(columns={'Sales': 'Y'})
-
-  # Defines store types
-  data_c = data_x[['StoreType_a', 'StoreType_b', 'StoreType_c', 'StoreType_d']]
-  data_c = data_c.rename(columns={'StoreType_a': 'A', 'StoreType_b': 'B',
-                                  'StoreType_c': 'C', 'StoreType_d': 'D'})
-
-  # Defines features
-  data_x = data_x.drop(['StoreType_a', 'StoreType_b',
-                        'StoreType_c', 'StoreType_d'], axis=1)
-
-  # Resets index
-  data_x = data_x.reset_index()
-  data_c = data_c.reset_index()
-
-  data_x = data_x.drop(['index'], axis=1)
-  data_c = data_c.drop(['index'], axis=1)
-
-  # Splits source, valid, and target sets
-  # Random partitioning
-  idx = np.random.permutation(len(data_x))
-
-  source_idx = idx[:dict_no['source']]
-  valid_idx = idx[dict_no['source']:(dict_no['source']+dict_no['valid'])]
-  target_idx = idx[(dict_no['source']+dict_no['valid']):]
-
-  x_source = data_x.loc[source_idx]
-  c_source = data_c.loc[source_idx]
-
-  x_valid = data_x.loc[valid_idx]
-  c_valid = data_c.loc[valid_idx]
-
-  x_target = data_x.loc[target_idx]
-  c_target = data_c.loc[target_idx]
-
-  # Selects source dataset based on the setting and test_store_type
-  if setting == 'train-on-all':
-    source_sub_idx = c_source.index[c_source[test_store_type] >= 0].tolist()
-  elif setting == 'train-on-rest':
-    source_sub_idx = c_source.index[c_source[test_store_type] == 0].tolist()
-  elif setting == 'train-on-specific':
-    source_sub_idx = c_source.index[c_source[test_store_type] == 1].tolist()
-
-  # Selects valid and target datasets based on test_store_type
-  valid_sub_idx = c_valid.index[c_valid[test_store_type] == 1].tolist()
-  target_sub_idx = c_target.index[c_target[test_store_type] == 1].tolist()
-
-  # Divides source, valid, and target datasets
-  source = x_source.loc[source_sub_idx]
-  valid = x_valid.loc[valid_sub_idx]
-  target = x_target.loc[target_sub_idx]
-
-  source.to_csv('./data_files/source.csv', index=False)
-  valid.to_csv('./data_files/valid.csv', index=False)
-  target.to_csv('./data_files/target.csv', index=False)
-
-  return
-
-
-def preprocess_data(normalization,
-                    train_file_name, valid_file_name, test_file_name):
+def preprocess_data(normalization, train_file_name, valid_file_name, test_file_name, data):
   """Loads datasets, divides features and labels, and normalizes features.
   Args:
     normalization: 'minmax' or 'standard'
@@ -302,9 +201,9 @@ def preprocess_data(normalization,
   """
 
   # Loads datasets
-  train = pd.read_csv('./data_files/'+train_file_name)
-  valid = pd.read_csv('./data_files/'+valid_file_name)
-  test = pd.read_csv('./data_files/'+test_file_name)
+  train = pd.read_csv(f'{data}/'+train_file_name)
+  valid = pd.read_csv(f'{data}/'+valid_file_name)
+  test = pd.read_csv(f'{data}/'+test_file_name)
 
   # Extracts label
   y_train = np.asarray(train['Y'])

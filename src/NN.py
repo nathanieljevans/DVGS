@@ -25,9 +25,12 @@ class NN(torch.nn.Module):
             seq.append(act())
             
         # output layer
+        #seq.append(torch.nn.Linear(hidden_channels, 10, bias=bias))
+        #seq.append(act())
+        #if norm: seq.append(norm(10))
+        #seq.append(torch.nn.Linear(10, out_channels, bias=bias))
         if norm: seq.append(norm(hidden_channels))
-        seq.append(torch.nn.Linear(hidden_channels, 10, bias=bias))
-        seq.append(torch.nn.Linear(10, out_channels, bias=bias))
+        seq.append(torch.nn.Linear(hidden_channels, out_channels, bias=bias))
 
         if out_fn is not None:
             # softmax, sigmoid, etc 
@@ -40,7 +43,9 @@ class NN(torch.nn.Module):
             for layer in self.f.children():
                 weights_init(layer, gain=gain)
 
-    def forward(self, x): 
+    def forward(self, x, y=None): 
+        if y is not None: 
+            x = torch.cat((x,y), dim=1)
         return self.f(x)
 
 def weights_init(m, gain=1):
