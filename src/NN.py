@@ -43,11 +43,11 @@ class NN(torch.nn.Module):
             for layer in self.f.children():
                 weights_init(layer, gain=gain)
 
-    def forward(self, x, y=None): 
+    def forward(self, x, y=None, idx=None): 
         if y is not None: 
             x = torch.cat((x,y), dim=1)
         return self.f(x)
 
 def weights_init(m, gain=1):
     if isinstance(m, torch.nn.Linear):
-        torch.nn.init.xavier_normal_(m.weight.data, gain=gain)
+        torch.nn.init.xavier_uniform_(m.weight.data, gain=gain)

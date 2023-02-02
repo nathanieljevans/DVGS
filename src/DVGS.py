@@ -13,17 +13,18 @@ from shutil import rmtree
 
 class DVGS(): 
 
-    def __init__(self, train_dataset, valid_dataset, test_dataset, model): 
+    def __init__(self, x_source, y_source, x_target, y_target, model): 
         ''''''
-        self.train = train_dataset 
-        self.valid = valid_dataset 
-        self.test = test_dataset 
+        self.x_source = x_source 
+        self.y_source = y_source 
+        self.x_target = x_target 
+        self.y_target = y_target
         self.model = model
 
-    def pretrain_(self, crit, num_workers=1, batch_size=256, lr=1e-3, epochs=100, use_cuda=True, verbose=True, report_metric=None): 
+    def pretrain_(self, crit, batch_size=256, lr=1e-3, epochs=100, use_cuda=True, verbose=True, report_metric=None): 
         '''
+        in-place model pre-training on source dataset 
         '''
-
         if torch.cuda.is_available() & use_cuda: 
             device = 'cuda'
         else: 
@@ -31,13 +32,14 @@ class DVGS():
         if verbose: print('using device:', device)
 
         self.model.train().to(device)
-        loader = torch.utils.data.DataLoader(self.train, num_workers=num_workers, batch_size=batch_size, shuffle=True)
         optim = torch.optim.Adam(self.model.parameters(), lr=lr)
 
         for i in range(epochs): 
             losses = []
-            for x,y in loader: 
-                x,y = myto(x,y, device)
+            for idx_batch in torch.split(torch.randperm(self.x_source.size(0)), batch_size): 
+                x = self.x_source[idx_batch, :]
+                y = self.y_source[idx_batch, :]
+                x,y = myto(x,y,device)
                 optim.zero_grad()
                 yhat = self.model(x)
                 loss = crit(yhat, y)
@@ -46,7 +48,6 @@ class DVGS():
                 losses.append(loss.item())
                 if report_metric is not None: 
                     metric = report_metric(y.detach().cpu().numpy(), yhat.detach().cpu().numpy())
-                    #print(f'batch loss: {loss.item():.2f} || batch metric: {metric:.2f}', end='\r')
                 else: 
                     metric = -666
             if verbose: print(f'epoch: {i} | loss: {np.mean(losses):.4f} | metric: {metric:0.4f}', end='\r')
@@ -58,7 +59,7 @@ class DVGS():
         dl= torch.cat([x.view(-1) for x in dl])
         return dl
 
-    def run(self, crit, save_dir='./dvgs_results/', similarity=torch.nn.CosineSimilarity(dim=1), optim=torch.optim.Adam, lr=1e-2, num_epochs=100, compute_every=1, target_batch_size=512, source_batch_size=512, num_workers=1, grad_params=None, verbose=True, use_cuda=True): 
+    def run(self, target_crit, source_crit, num_restarts=1, save_dir='./dvgs_results/', similarity=torch.nn.CosineSimilarity(dim=1), optim=torch.optim.Adam, lr=1e-2, num_epochs=100, compute_every=1, target_batch_size=512, source_batch_size=512, num_workers=1, grad_params=None, verbose=True, use_cuda=True): 
         '''
         trains the model and returns data values 
 
@@ -68,7 +69,7 @@ class DVGS():
             similarity                      similarity metric
             optim                           optimization method 
             lr                              learning rate 
-            num_epochs                      number of epochs to train the model 
+            iterations                      number of iterations to train the model 
             compute_every                   period to compute gradient similarities, value of 1 will compute every step. 
             target_batch_size               batch_size to use for model "training" on the target dataset; if batch_size > len(self.valid) then batches won't be used. 
             source_batch_size               batch size to use for gradient calculation on the source dataset; reducing this can improve memory foot print. 
@@ -85,17 +86,14 @@ class DVGS():
         mkdir(f'{save_dir}/{self.run_id}')
 
         model = self.model
-        optim = optim(model.parameters(), lr=lr)
+        #optim = optim(model.parameters(), lr=lr)
         
         # if no grad params are provided
         if grad_params is None: 
             grad_params = [n for n,_ in model.named_parameters()]
 
-        valid_loader = torch.utils.data.DataLoader(self.valid, batch_size=target_batch_size, num_workers=num_workers, shuffle=True)
-        train_loader = torch.utils.data.DataLoader(self.train, batch_size=source_batch_size, num_workers=num_workers, shuffle=False)
-
         # place holder for vals 
-        data_vals = torch.zeros((len(self.train),))
+        data_vals = torch.zeros((self.x_source.size(0),))
 
         if torch.cuda.is_available() & use_cuda: 
             device = 'cuda'
@@ -109,47 +107,58 @@ class DVGS():
         nn = 0
         iter = 0
         elapsed = []
-        for epoch in range(num_epochs): 
-            losses = []
-            for x_valid, y_valid in valid_loader:
-                model.train()
-                x_valid, y_valid = myto(x_valid, y_valid, device)
+        for ii in range(num_restarts):
+            model.reset_parameters() 
+            opt = optim(model.parameters(), lr=lr)
 
-                # step 1: compute validation gradient
-                optim.zero_grad()
-                yhat_valid = model(x_valid)
-                loss = crit(yhat_valid, y_valid)
-                grad_valid = self._get_grad(loss, [p for n,p in model.named_parameters() if n in grad_params])
+            for epoch in range(num_epochs): 
+                losses = []
 
-                if iter%compute_every==0: 
-                    tic = time.time()
-                    # step 2: for each train sample 
-                    j = 0
-                    # to speed up per-sample gradient calculations 
-                    fmodel, params, buffers = make_functional_with_buffers(model)
-                    ft_compute_sample_grad = get_per_sample_grad_func(crit, fmodel, device)
-                    for x_batch, y_batch in train_loader: 
-                        _tic = time.time()
-                        x_batch, y_batch = myto(x_batch, y_batch, device)
-                        ft_per_sample_grads = ft_compute_sample_grad(params, buffers, x_batch, y_batch)
-                        batch_grads = torch.cat([_g.view(y_batch.size(0), -1) for _g, (n,p) in zip(ft_per_sample_grads, model.named_parameters()) if n in grad_params], dim=1)
-                        batch_sim = similarity(grad_valid.unsqueeze(0).expand(y_batch.size(0), -1), batch_grads).detach().cpu()
-                        data_vals[j:int(j + y_batch.size(0))] = batch_sim 
-                        print(f'epoch {epoch} || computing sample gradients... [{j}/{len(self.train)}] ({((time.time()-_tic)/source_batch_size)*len(self.train)/60:.4f} min/source-epoch)', end='\r')
-                        j += y_batch.size(0)
-                    nn += 1
-                    np.save(f'{save_dir}/{self.run_id}/data_value_iter={nn}', data_vals)
-                    elapsed.append(time.time()-tic)
+                for idx_target in torch.split(torch.randperm(self.x_target.size(0)), target_batch_size):
+            
+                    x_target = self.x_target[idx_target, :]
+                    y_target = self.y_target[idx_target, :]
+                    model.train()
+                    x_target, y_target = myto(x_target, y_target, device)
 
-                # step 3: optimize on validation gradient 
-                optim.zero_grad()
-                loss.backward()
-                optim.step()
-                losses.append(loss.item())
-                iter += 1
+                    # step 1: compute target/validation gradient
+                    yhat_target = model(x_target)
+                    loss = target_crit(yhat_target, y_target)
+                    grad_target = self._get_grad(loss, [p for n,p in model.named_parameters() if n in grad_params])
 
-            print(f'epoch {epoch} || avg loss: {np.mean(losses):.2f} || grad time elapsed: {np.mean(elapsed):.1f} s', end='\r')
+                    if iter%compute_every==0: 
+                        tic = time.time()
+                        # step 2: for each source/train sample 
+                        j = 0
+                        # to speed up per-sample gradient calculations 
+                        fmodel, params, buffers = make_functional_with_buffers(model)
+                        ft_compute_sample_grad = get_per_sample_grad_func(source_crit, fmodel, device)
+                        for idx_source in torch.split(torch.arange(self.x_source.size(0)), source_batch_size): 
+                            _tic = time.time()
+                            x_source = self.x_source[idx_source, :]
+                            y_source = self.y_source[idx_source, :]
+                            x_source, y_source = myto(x_source, y_source, device)
+                            ft_per_sample_grads = ft_compute_sample_grad(params, buffers, x_source, y_source)
+                            batch_grads = torch.cat([_g.view(y_source.size(0), -1) for _g, (n,p) in zip(ft_per_sample_grads, model.named_parameters()) if n in grad_params], dim=1)
+                            batch_sim = similarity(grad_target.unsqueeze(0).expand(y_source.size(0), -1), batch_grads).detach().cpu()
+                            data_vals[j:int(j + y_source.size(0))] = batch_sim 
+                            #print(f'epoch {epoch} || computing sample gradients... [{j}/{self.x_source.size(0)}] ({((time.time()-_tic)/source_batch_size)*self.x_source.size(0)/60:.4f} min/source-epoch)', end='\r')
+                            j += y_source.size(0)
+                        nn += 1
+                        np.save(f'{save_dir}/{self.run_id}/data_value_iter={nn}', data_vals)
+                        elapsed.append(1e6 * (time.time()-tic)/idx_source.size(0)) # micro-seconds 
 
+                    # step 3: optimize on target/validation gradient 
+                    opt.zero_grad()
+                    loss.backward()
+                    opt.step()
+                    losses.append(loss.item())
+                    iter += 1
+
+                print(' '*100, end='\r')
+                print(f'[restart: {ii}] iteration {epoch} || avg target loss: {np.mean(losses):.2f} || gradient sim. calc. elapsed / sample: {np.mean(elapsed):.1f} us', end='\r')
+
+            print()
         return self.run_id
 
     def agg(self, path, reduction='mean'):

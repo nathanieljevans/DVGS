@@ -19,7 +19,7 @@ To explore dvgs, dvrl or Dshap... use `example.ipynb`
 ## adult label corruption 
 
 ```bash 
-(dvgs) $ python run_adult_label_corruption.py --out ../adult_results/ --noise_rate 0.2 --train_num 1000 --valid_num 400 --num_layers 2 --hidden_channels 100 --do 0.25 --epochs 100 --lr 1e-3 --compute_every 1 --target_batch_size 400 --source_batch_size 1000 --dvrl_outer_iter 2000 --dvrl_inner_iter 100 --dvrl_outer_batch_size 1000 --dvrl_inner_batch_size 256 --dvrl_est_lr 1e-2 --dvrl_pred_lr 1e-3 --dvrl_T 20 --dvrl_entropy_beta 1e-5 --dvrl_entropy_decay 1. --dvrl_est_num_layers 2 --dvrl_est_hidden_channels 300 --dvrl_est_do 0. --dshap_epochs 100 --dshap_tol 0.03 --dshap_lr 1e-3
+(dvgs) $ python run_adult_label_corruption.py --out ../adult_results/ --noise_rate 0.2 --train_num 1000 --valid_num 400 --num_layers 2 --hidden_channels 100 --do 0.25 --epochs 100 --lr 1e-3 --compute_every 1 --target_batch_size 400 --source_batch_size 1000 --dvrl_outer_iter 2000 --dvrl_inner_iter 100 --dvrl_outer_batch_size 1000 --dvrl_inner_batch_size 250 --dvrl_est_lr 1e-3 --dvrl_pred_lr 1e-4 --dvrl_T 20 --dvrl_entropy_beta 1e-3 --dvrl_entropy_decay 1. --dvrl_est_num_layers 2 --dvrl_est_hidden_channels 200 --dvrl_est_do 0. --dshap_epochs 100 --dshap_tol 0.03 --dshap_lr 1e-3
 ```
 
 ## blog label corruption 

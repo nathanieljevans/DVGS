@@ -1,5 +1,6 @@
-/data
 */data
-/src/data_files
-/adult_results/
-/lincs_results/
+/data
+*/temp-data
+*/data_files
+*/results
+/results

@@ -32,6 +32,9 @@ import copy
 def get_args(): 
     parser = argparse.ArgumentParser()
 
+    parser.add_argument("--dataset", type=str,
+                        help="dataset name ['adult' or 'blog']")
+
     parser.add_argument("--out", type=str,
                         help="output dir")
 
@@ -113,6 +116,8 @@ def get_args():
     parser.add_argument("--dshap_lr", type=float,
                         help="[DShap] learning rate")
 
+    parser.add_argument('--dvrl_fix_baseline', action=argparse.BooleanOptionalAction)
+
     return parser.parse_args()
 
 
@@ -127,14 +132,20 @@ if __name__ == '__main__':
     mkdir(f'{args.out}/{run_id}')
 
     print('downloading and processing data...')
-    noise_idx = load_tabular_data('adult', {'train':args.train_num, 'valid':args.valid_num}, noise_rate=args.noise_rate, out=f'{args.out}/{run_id}/data_files/') # saves to disk
+    noise_idx = load_tabular_data(args.dataset, {'train':args.train_num, 'valid':args.valid_num}, noise_rate=args.noise_rate, out=f'{args.out}/{run_id}/data_files/') # saves to disk
     x_train, y_train, x_valid, y_valid, x_test, y_test, col_names = preprocess_data('minmax', 'train.csv', 'valid.csv', 'test.csv', data=f'{args.out}/{run_id}/data_files/')
     train_dataset = GenDataset(x_train, y_train)
     test_dataset = GenDataset(x_test, y_test)
     valid_dataset = GenDataset(x_valid, y_valid)
 
-    model = NN(in_channels=108, out_channels=2, num_layers=args.num_layers, hidden_channels=args.hidden_channels, norm=True, dropout=args.do, bias=True, act=torch.nn.Mish, out_fn=torch.nn.Softmax(dim=-1))
-    dvgs = DVGS(train_dataset, valid_dataset, test_dataset, model)
+
+    # same model used for all 3 ... 
+    model = NN(in_channels=x_train.shape[1], out_channels=2, num_layers=args.num_layers, hidden_channels=args.hidden_channels, norm=True, dropout=args.do, bias=True, act=torch.nn.Mish, out_fn=torch.nn.Softmax(dim=-1))
+    
+    ########
+    # DVGS #
+    ########
+    dvgs = DVGS(train_dataset, valid_dataset, test_dataset, copy.deepcopy(model))
 
     CEL = torch.nn.CrossEntropyLoss() 
 
@@ -163,10 +174,9 @@ if __name__ == '__main__':
 
     print('running dshap...')
 
-    model = NN(in_channels=108, out_channels=2, num_layers=args.num_layers, hidden_channels=args.hidden_channels, norm=True, dropout=args.do, bias=True, act=torch.nn.Mish, out_fn=torch.nn.Softmax(dim=-1))
     CEL = torch.nn.CrossEntropyLoss() 
 
-    dshap = DShap.DShap(model           = model.cpu(), 
+    dshap = DShap.DShap(model           = copy.deepcopy(model), 
                         crit            = lambda x,y: CEL(x,y.squeeze(1).type(torch.long)),
                         train_dataset   = copy.deepcopy(train_dataset), 
                         V               = DShap.V(copy.deepcopy(valid_dataset), roc_auc_score),
@@ -176,7 +186,7 @@ if __name__ == '__main__':
                         lr              = args.dshap_lr)
 
     tic = time.time() 
-    vals_shap = dshap.TMC(max_iterations=500, min_iterations=50, use_cuda=True, T=5, stopping_criteria=0.999)
+    vals_shap = dshap.TMC(max_iterations=1000, min_iterations=100, use_cuda=True, T=5, stopping_criteria=0.999)
     np.save(f'{args.out}/{run_id}/dshap_data_values.npy', vals_shap)
     print()
     print(f'time elapsed: {(time.time() - tic)/60:.2f} min')
@@ -185,7 +195,7 @@ if __name__ == '__main__':
 
     print('running dvrl...')
 
-    pred = NN(in_channels=108, out_channels=2, num_layers=args.num_layers, hidden_channels=args.hidden_channels, norm=True, dropout=args.do, bias=True, act=torch.nn.Mish, out_fn=torch.nn.Softmax(dim=-1))
+    pred = copy.deepcopy(model)
     est = NN(in_channels=112, out_channels=1, num_layers=args.dvrl_est_num_layers, hidden_channels=args.dvrl_est_hidden_channels, norm=True, dropout=args.dvrl_est_do, bias=True, act=torch.nn.Mish, out_fn=torch.nn.Sigmoid())
 
     dvrl = DVRL(train_dataset, valid_dataset, test_dataset, predictor=pred, estimator=est, problem='classification')
@@ -205,7 +215,7 @@ if __name__ == '__main__':
                         moving_average_window  = args.dvrl_T,
                         entropy_beta           = args.dvrl_entropy_beta, 
                         entropy_decay          = args.dvrl_entropy_decay,
-                        fix_baseline           = False)
+                        fix_baseline           = args.dvrl_fix_baseline)
 
     if torch.is_tensor(vals_dvrl): 
         vals_dvrl = vals_dvrl.detach().cpu().numpy().ravel()
@@ -225,7 +235,6 @@ if __name__ == '__main__':
     pkl.dump({'pk':pk, 'dvgs_corr':dvgs_corr, 'dvrl_corr':dvrl_corr, 'shap_corr':shap_corr, 'p_perfect':p_perfect, 'p_random':p_random}, open(f'{args.out}/{run_id}/corruption_res_dict.pkl' , 'wb'))
 
     print('calculating filtered scores...')
-    model = NN(in_channels=108, out_channels=2, num_layers=args.num_layers, hidden_channels=args.hidden_channels, norm=True, dropout=args.do, bias=True, act=torch.nn.Mish, out_fn=torch.nn.Softmax(dim=-1))
     CEL = torch.nn.CrossEntropyLoss() 
     crit = lambda x,y: CEL(x,y.squeeze(1).type(torch.long))
     metric = lambda y,yhat: roc_auc_score(y, yhat[:, 1]) 

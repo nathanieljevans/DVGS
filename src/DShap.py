@@ -17,51 +17,53 @@ from matplotlib import pyplot as plt
 
 class V():
     '''performance score'''
-    def __init__(self, val_dataset, perf_metric):
-        self.val_dataset =  val_dataset
+    def __init__(self, x_valid, y_valid, perf_metric):
+        self.x = x_valid 
+        self.y = y_valid 
         self.perf_metric = perf_metric
 
     def get_score(self, model):
         model.eval()
         with torch.no_grad(): 
-            y = self.val_dataset.y.detach().cpu().numpy()
-            yhat = model(self.val_dataset.x).argmax(dim=-1).detach().cpu().numpy()
-
+            y = self.y.detach().cpu().numpy()
+            yhat = model(self.x).detach().cpu().numpy()
         return self.perf_metric(y, yhat)
 
     def to(self, device): 
-        self.val_dataset.x = self.val_dataset.x.to(device)
-        self.val_dataset.y = self.val_dataset.y.to(device)
+        self.x = self.x.to(device)
+        self.y = self.y.to(device)
 
     
 class DShap(): 
     ''''''
-    def __init__(self, model, crit, train_dataset, V, epochs=50, lr=1e-3, optim=torch.optim.Adam, tol=0.01): 
+    def __init__(self, model, crit, x_train, y_train, x_valid, y_valid, perf_metric, epochs=50, lr=1e-3, optim=torch.optim.Adam, tol=0.01, baseline_repl=10, verbose=True): 
+
+        self.x_train = x_train 
+        self.y_train = y_train
+        self.V = V(x_valid, y_valid, perf_metric)
         self.model = model 
         self.crit = crit
-        self.train_dataset = train_dataset
-        self.V = V
         self.epochs = epochs
         self.lr = lr
         self.optim = optim
         self.tol = tol
+        self.verbose = verbose
 
-        _ii = 25
         # get v0 
-        self.v0 = np.mean([V.get_score(model=self.train_(model     = copy.deepcopy(self.model), 
-                                                         x         = self.train_dataset.x,
-                                                         y         = self.train_dataset.y[torch.randperm(self.train_dataset.y.size(0)), :])) for _ in range(_ii)])
+        self.v0 = np.mean([self.V.get_score(model=self.fit(model     = copy.deepcopy(self.model), 
+                                                      x         = self.x_train,
+                                                      y         = self.y_train[torch.randperm(self.y_train.size(0)), :])) for _ in range(baseline_repl)])
 
         # get VD 
-        self.vD = np.mean([V.get_score(model=self.train_(model     = copy.deepcopy(self.model), 
-                                                         x         = self.train_dataset.x,
-                                                         y         = self.train_dataset.y)) for _ in range(_ii)])
+        self.vD = np.mean([self.V.get_score(model=self.fit(model     = copy.deepcopy(self.model), 
+                                                      x         = self.x_train,
+                                                      y         = self.y_train)) for _ in range(baseline_repl)])
 
-        print(f'v0: {self.v0:.4f}')
-        print(f'vD: {self.vD:.4f}')
-        print()
+        if self.verbose: print(f'v0 (null model): {self.v0:.4f}')
+        if self.verbose: print(f'vD (all data): {self.vD:.4f}')
+        if self.verbose: print()
 
-    def train_(self, model, x,y):
+    def fit(self, model, x,y):
         '''faster training for small batches'''
         model = model.train()
         optim = self.optim(model.parameters(), lr=self.lr)
@@ -75,14 +77,15 @@ class DShap():
         return model
 
     def to(self, device): 
+        '''move all data to device; speed up for small datasets'''
         self.model = self.model.to(device)
-        self.train_dataset.x = self.train_dataset.x.to(device)
-        self.train_dataset.y = self.train_dataset.y.to(device)
+        self.x_train = self.x_train.to(device)
+        self.y_train = self.y_train.to(device)
 
     def TMC(self, max_iterations=1000, min_iterations=100, use_cuda=True, T=5, stopping_criteria=0.999): 
         ''''''
-        print('starting Data Shapley TMC...')
-        phi = np.zeros((len(self.train_dataset), max_iterations))
+        if self.verbose: print('starting Data Shapley TMC...')
+        phi = np.zeros((self.x_train.size(0), max_iterations))
 
         if torch.cuda.is_available() & use_cuda: 
             device='cuda'
@@ -92,20 +95,20 @@ class DShap():
         # move everything over to model device first
         self.to(device)
         self.V.to(device)
-        for t in range(max_iterations): 
 
-            pi = torch.randperm(len(self.train_dataset))
+        for t in range(max_iterations): 
+            pi = torch.randperm(self.x_train.size(0))
             vj = self.v0
 
             trunc_counter = 0
-            for j in range(len(self.train_dataset)): 
+            for j in range(self.x_train.shape[0]): 
                 if trunc_counter > 5:
                     break 
                 
                 model = copy.deepcopy(self.model)
                 idx = pi[0:(j+1)]
-                x,y = self.train_dataset.x[idx, :], self.train_dataset.y[idx, :]
-                model = self.train_(model, x, y)
+                x,y = self.x_train[idx, :], self.y_train[idx, :]
+                model = self.fit(model, x, y)
                 vj_new = self.V.get_score(model)
 
                 phi[pi[j], t] = (vj_new - vj)
@@ -117,18 +120,21 @@ class DShap():
                 else: 
                     trunc_counter = 0 
 
-            #max_err = error(phi[:, :t].T, min_iter=min_iterations)
+            # NOTE: 
+            # divergence from Data Shapley paper
+            # here we use a convergence critieria based on rank change 
+            # since our primary outcome (label corruption) is rank based
             if t > (T+1): 
                 running_rank_corr = np.mean(compute_rank_convergence(phi[:, :t])[-T:])
             else: 
                 running_rank_corr = -1.
 
             if (running_rank_corr > stopping_criteria) & (t >= min_iterations): 
-                print()
-                print(f'MC stopping criteria met. running avg rank correlation: {running_rank_corr:.4f}')
+                if self.verbose: print()
+                if self.verbose: print(f'MC stopping criteria met. running avg rank correlation: {running_rank_corr:.4f}')
                 break
 
-            print(f'iter: {t} || max j: {j} || max vj: {vj:.4f} || rank_corr: {running_rank_corr:.4f}', end='\r')
+            if self.verbose: print(f'iter: {t} || max j: {j} || max vj: {vj:.4f} || rank_corr: {running_rank_corr:.4f}', end='\r')
 
         return phi[:, :t].mean(axis=1)
 

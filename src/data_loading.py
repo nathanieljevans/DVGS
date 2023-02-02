@@ -1,4 +1,25 @@
-# NOTE: from, https://github.com/google-research/google-research/blob/master/dvrl/data_loading.py
+#from __future__ import absolute_import
+#from __future__ import division
+#from __future__ import print_function
+
+'''
+# NOTE: 
+# this file is modified from: https://github.com/google-research/google-research/blob/master/dvrl/data_loading.py
+
+Citation: 
+
+@misc{https://doi.org/10.48550/arxiv.1909.11671,
+  doi = {10.48550/ARXIV.1909.11671},
+  url = {https://arxiv.org/abs/1909.11671},
+  author = {Yoon, Jinsung and Arik, Sercan O. and Pfister, Tomas},
+  keywords = {Machine Learning (cs.LG), Machine Learning (stat.ML), FOS: Computer and information sciences, FOS: Computer and information sciences},
+  title = {Data Valuation using Reinforcement Learning},
+  publisher = {arXiv},
+  year = {2019},
+  copyright = {arXiv.org perpetual, non-exclusive license}
+}
+
+# DVRL license: 
 
 # coding=utf-8
 # Copyright 2022 The Google Research Authors.
@@ -15,11 +36,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Data loading and preprocessing functions."""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+Data loading and preprocessing functions.
+'''
 
 import io
 import os
@@ -33,21 +51,20 @@ from six.moves import urllib
 from sklearn import preprocessing
 
 
-
 def load_tabular_data(data_name, dict_no, noise_rate, out='../data/adult/'):
   """Loads Adult Income and Blog Feedback datasets.
-  This module loads the two tabular datasets and saves train.csv, valid.csv and
-  test.csv files under data_files directory.
-  UCI Adult data link: https://archive.ics.uci.edu/ml/datasets/Adult
-  UCI Blog data link: https://archive.ics.uci.edu/ml/datasets/BlogFeedback
-  If noise_rate > 0.0, adds noise on the datasets.
-  Then, saves train.csv, valid.csv, test.csv on './data_files/' directory
-  Args:
-    data_name: 'adult' or 'blog'
-    dict_no: training and validation set numbers
-    noise_rate: label corruption ratio
-  Returns:
-    noise_idx: indices of noisy samples
+    This module loads the two tabular datasets and saves train.csv, valid.csv and
+    test.csv files under data_files directory.
+    UCI Adult data link: https://archive.ics.uci.edu/ml/datasets/Adult
+    UCI Blog data link: https://archive.ics.uci.edu/ml/datasets/BlogFeedback
+    If noise_rate > 0.0, adds noise on the datasets.
+    Then, saves train.csv, valid.csv, test.csv on './data_files/' directory
+    Args:
+      data_name: 'adult' or 'blog'
+      dict_no: training and validation set numbers
+      noise_rate: label corruption ratio
+    Returns:
+      noise_idx: indices of noisy samples
   """
 
   # Loads datasets from links
@@ -72,7 +89,7 @@ def load_tabular_data(data_name, dict_no, noise_rate, out='../data/adult/'):
 
     # Creates binary labels
     df['Income'] = df['Income'].map({' <=50K': 0, ' >50K': 1,
-                                     ' <=50K.': 0, ' >50K.': 1})
+                                      ' <=50K.': 0, ' >50K.': 1})
 
     # Changes string to float
     df.Age = df.Age.astype(float)
@@ -84,8 +101,8 @@ def load_tabular_data(data_name, dict_no, noise_rate, out='../data/adult/'):
 
     # One-hot encoding
     df = pd.get_dummies(df, columns=['WorkClass', 'Education', 'MaritalStatus',
-                                     'Occupation', 'Relationship',
-                                     'Race', 'Gender', 'NativeCountry'])
+                                      'Occupation', 'Relationship',
+                                      'Race', 'Gender', 'NativeCountry'])
 
     # Sets label name as Y
     df = df.rename(columns={'Income': 'Y'})
@@ -184,174 +201,89 @@ def load_tabular_data(data_name, dict_no, noise_rate, out='../data/adult/'):
 
 
 def preprocess_data(normalization, train_file_name, valid_file_name, test_file_name, data):
-  """Loads datasets, divides features and labels, and normalizes features.
-  Args:
-    normalization: 'minmax' or 'standard'
-    train_file_name: file name of training set
-    valid_file_name: file name of validation set
-    test_file_name: file name of testing set
-  Returns:
-    x_train: training features
-    y_train: training labels
-    x_valid: validation features
-    y_valid: validation labels
-    x_test: testing features
-    y_test: testing labels
-    col_names: column names
-  """
+    """Loads datasets, divides features and labels, and normalizes features.
+    Args:
+      normalization: 'minmax' or 'standard'
+      train_file_name: file name of training set
+      valid_file_name: file name of validation set
+      test_file_name: file name of testing set
+    Returns:
+      x_train: training features
+      y_train: training labels
+      x_valid: validation features
+      y_valid: validation labels
+      x_test: testing features
+      y_test: testing labels
+      col_names: column names
+    """
 
-  # Loads datasets
-  train = pd.read_csv(f'{data}/'+train_file_name)
-  valid = pd.read_csv(f'{data}/'+valid_file_name)
-  test = pd.read_csv(f'{data}/'+test_file_name)
+    # Loads datasets
+    train = pd.read_csv(f'{data}/'+train_file_name)
+    valid = pd.read_csv(f'{data}/'+valid_file_name)
+    test = pd.read_csv(f'{data}/'+test_file_name)
 
-  # Extracts label
-  y_train = np.asarray(train['Y'])
-  y_valid = np.asarray(valid['Y'])
-  y_test = np.asarray(test['Y'])
+    # Extracts label
+    y_train = np.asarray(train['Y'])
+    y_valid = np.asarray(valid['Y'])
+    y_test = np.asarray(test['Y'])
 
-  # Drops label
-  train = train.drop(columns=['Y'])
-  valid = valid.drop(columns=['Y'])
-  test = test.drop(columns=['Y'])
+    # Drops label
+    train = train.drop(columns=['Y'])
+    valid = valid.drop(columns=['Y'])
+    test = test.drop(columns=['Y'])
 
-  # Column names
-  col_names = train.columns.values.astype(str)
+    # Column names
+    col_names = train.columns.values.astype(str)
 
-  # Concatenates train, valid, test for normalization
-  df = pd.concat((train, valid, test), axis=0)
+    # Concatenates train, valid, test for normalization
+    df = pd.concat((train, valid, test), axis=0)
 
-  # Normalization
-  if normalization == 'minmax':
-    scaler = preprocessing.MinMaxScaler()
-  elif normalization == 'standard':
-    scaler = preprocessing.StandardScaler()
+    # Normalization
+    if normalization == 'minmax':
+      scaler = preprocessing.MinMaxScaler()
+    elif normalization == 'standard':
+      scaler = preprocessing.StandardScaler()
 
-  scaler.fit(df)
-  df = scaler.transform(df)
+    scaler.fit(df)
+    df = scaler.transform(df)
 
-  # Divides df into train / valid / test sets
-  train_no = len(train)
-  valid_no = len(valid)
-  test_no = len(test)
+    # Divides df into train / valid / test sets
+    train_no = len(train)
+    valid_no = len(valid)
+    test_no = len(test)
 
-  x_train = df[range(train_no), :]
-  x_valid = df[range(train_no, train_no + valid_no), :]
-  x_test = df[range(train_no+valid_no, train_no+valid_no+test_no), :]
+    x_train = df[range(train_no), :]
+    x_valid = df[range(train_no, train_no + valid_no), :]
+    x_test = df[range(train_no+valid_no, train_no+valid_no+test_no), :]
 
-  return x_train, y_train, x_valid, y_valid, x_test, y_test, col_names
-
-
-def load_image_data(data_name, dict_no, noise_rate):
-  """Loads image datasets.
-  This module loads CIFAR10 and CIFAR100 datasets and
-  saves train.npz, valid.npz and test.npz files under data_files directory.
-  If noise_rate > 0.0, adds noise on the datasets.
-  Args:
-    data_name: 'cifar10' or 'cifar100'
-    dict_no: Training and validation set numbers
-    noise_rate: Label corruption ratio
-  Returns:
-    noise_idx: Indices of noisy samples
-  """
-
-  # Loads datasets
-  if data_name == 'cifar10':
-    (x_train, y_train), (x_test, y_test) = datasets.cifar10.load_data()
-  elif data_name == 'cifar100':
-    (x_train, y_train), (x_test, y_test) = datasets.cifar100.load_data()
-
-  # Splits train, valid and test sets
-  train_idx = np.random.permutation(len(x_train))
-
-  valid_idx = train_idx[:dict_no['valid']]
-  train_idx = train_idx[dict_no['valid']:(dict_no['train']+dict_no['valid'])]
-
-  test_idx = np.random.permutation(len(x_test))[:dict_no['test']]
-
-  x_valid = x_train[valid_idx]
-  x_train = x_train[train_idx]
-  x_test = x_test[test_idx]
-
-  y_valid = y_train[valid_idx].flatten()
-  y_train = y_train[train_idx].flatten()
-  y_test = y_test[test_idx].flatten()
-
-  # Adds noise on labels
-  y_train, noise_idx = corrupt_label(y_train, noise_rate)
-
-  # Saves data
-  if not os.path.exists('data_files'):
-    os.makedirs('data_files')
-
-  np.savez_compressed('./data_files/train.npz',
-                      x_train=x_train, y_train=y_train)
-  np.savez_compressed('./data_files/valid.npz',
-                      x_valid=x_valid, y_valid=y_valid)
-  np.savez_compressed('./data_files/test.npz',
-                      x_test=x_test, y_test=y_test)
-
-  return noise_idx
-
-
-def load_image_data_from_file(train_file_name, valid_file_name, test_file_name):
-  """Loads image datasets from npz files and divides features and labels.
-  Args:
-    train_file_name: file name of training set
-    valid_file_name: file name of validation set
-    test_file_name: file name of testing set
-  Returns:
-    x_train: training features
-    y_train: training labels
-    x_valid: validation features
-    y_valid: validation labels
-    x_test: testing features
-    y_test: testing labels
-  """
-
-  # Loads images datasets
-  train = np.load('./data_files/'+train_file_name)
-  valid = np.load('./data_files/'+valid_file_name)
-  test = np.load('./data_files/'+test_file_name)
-
-  # Divides features and labels
-  x_train = train['x_train']
-  y_train = train['y_train']
-
-  x_valid = valid['x_valid']
-  y_valid = valid['y_valid']
-
-  x_test = test['x_test']
-  y_test = test['y_test']
-
-  return x_train, y_train, x_valid, y_valid, x_test, y_test
+    return x_train, y_train, x_valid, y_valid, x_test, y_test, col_names
 
 
 
 # https://github.com/google-research/google-research/blob/master/dvrl/dvrl_utils.py
 def corrupt_label(y_train, noise_rate):
-  """Corrupts training labels.
-  Args:
-    y_train: training labels
-    noise_rate: input noise ratio
-  Returns:
-    corrupted_y_train: corrupted training labels
-    noise_idx: corrupted index
-  """
+    """Corrupts training labels.
+    Args:
+      y_train: training labels
+      noise_rate: input noise ratio
+    Returns:
+      corrupted_y_train: corrupted training labels
+      noise_idx: corrupted index
+    """
 
-  y_set = list(set(y_train))
+    y_set = list(set(y_train))
 
-  # Sets noise_idx
-  temp_idx = np.random.permutation(len(y_train))
-  noise_idx = temp_idx[:int(len(y_train) * noise_rate)]
+    # Sets noise_idx
+    temp_idx = np.random.permutation(len(y_train))
+    noise_idx = temp_idx[:int(len(y_train) * noise_rate)]
 
-  # Corrupts label
-  corrupted_y_train = y_train[:]
+    # Corrupts label
+    corrupted_y_train = y_train[:]
 
-  for itt in noise_idx:
-    temp_y_set = y_set[:]
-    del temp_y_set[y_train[itt]]
-    rand_idx = np.random.randint(len(y_set) - 1)
-    corrupted_y_train[itt] = temp_y_set[rand_idx]
+    for itt in noise_idx:
+      temp_y_set = y_set[:]
+      del temp_y_set[y_train[itt]]
+      rand_idx = np.random.randint(len(y_set) - 1)
+      corrupted_y_train[itt] = temp_y_set[rand_idx]
 
-  return corrupted_y_train, noise_idx
+    return corrupted_y_train, noise_idx
