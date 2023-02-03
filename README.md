@@ -42,9 +42,9 @@ In this project we implement versions of:
 
 ## Data Shapley (DShap)
 
-[arxiv](https://arxiv.org/abs/1904.02868)
-[proceedings](https://proceedings.mlr.press/v97/ghorbani19c/ghorbani19c.pdf)
-[github](https://github.com/amiratag/DataShapley)
+[arxiv](https://arxiv.org/abs/1904.02868)  
+[proceedings](https://proceedings.mlr.press/v97/ghorbani19c/ghorbani19c.pdf)  
+[github](https://github.com/amiratag/DataShapley)  
 
 ```
 @inproceedings{ghorbani2019data,
@@ -58,26 +58,19 @@ In this project we implement versions of:
 
 ## Data Valuation with Reinforcement Learning (DVRL) 
 
-[arxiv](https://arxiv.org/abs/1909.11671)
-[proceedings](https://proceedings.mlr.press/v119/yoon20a.html)
-[github](https://github.com/google-research/google-research/tree/master/dvrl)
+[arxiv](https://arxiv.org/abs/1909.11671)  
+[proceedings](https://proceedings.mlr.press/v119/yoon20a.html)  
+[github](https://github.com/google-research/google-research/tree/master/dvrl)  
 
 ```
 @misc{https://doi.org/10.48550/arxiv.1909.11671,
   doi = {10.48550/ARXIV.1909.11671},
-  
   url = {https://arxiv.org/abs/1909.11671},
-  
   author = {Yoon, Jinsung and Arik, Sercan O. and Pfister, Tomas},
-  
   keywords = {Machine Learning (cs.LG), Machine Learning (stat.ML), FOS: Computer and information sciences, FOS: Computer and information sciences},
-  
   title = {Data Valuation using Reinforcement Learning},
-  
   publisher = {arXiv},
-  
   year = {2019},
-  
   copyright = {arXiv.org perpetual, non-exclusive license}
 }
 ```
