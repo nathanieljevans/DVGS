@@ -126,7 +126,7 @@ if __name__ == '__main__':
                   x_valid       = x_valid,
                   y_valid       = y_valid, **config.loo_kwargs)
 
-        vals = loo.run().ravel()
+        vals = np.array(loo.run()).ravel()
 
     elif args.method == 'random': 
 
