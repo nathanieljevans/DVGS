@@ -12,7 +12,7 @@ import argparse
 import numpy as np
 import torch 
 import os 
-from AEDataset import AEDataset
+from deprecated.AEDataset import AEDataset
 from DVGS import DVGS
 from AE import AE
 import time 

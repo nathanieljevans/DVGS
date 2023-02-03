@@ -12,7 +12,7 @@ usage:
 import argparse 
 import numpy as np
 from data_loading import load_tabular_data, preprocess_data, corrupt_label
-from GenDataset import GenDataset
+from deprecated.GenDataset import GenDataset
 from uuid import uuid4
 from os import mkdir
 from os.path import exists 

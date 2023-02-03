@@ -2,7 +2,7 @@
 import numpy as np
 import copy
 import torch
-from GenDataset import GenDataset
+from deprecated.GenDataset import GenDataset
 from data_loading import load_tabular_data, preprocess_data
 import shutil 
 import torchvision 
