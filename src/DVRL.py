@@ -18,7 +18,8 @@ import torch
 import numpy as np
 import time 
 import copy
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, r2_score
+from matplotlib import pyplot as plt
 
 class DVRL(): 
 
@@ -38,8 +39,15 @@ class DVRL():
         if self.problem == 'classification':
             self.num_classes = len(np.unique(self.y_train.detach().cpu().numpy()))
 
-    def fit(self, model, x, y, crit, batch_size=256, lr=1e-3, epochs=100, use_cuda=True, verbose=False): 
-        '''pretrain predictor'''
+    def fit(self, model, x, y, crit, batch_size, lr, iters, use_cuda=True, verbose=False): 
+        '''Fits a model with a given number of iterations
+        
+        NOTE: There is a critical distinction between training with iterations rather than epochs; with epochs, more obs. results in 
+              more iterations/gradient-updates, whereas with iterations the amount of data is indenpendant of the number of iterations. 
+              This is critical for our DVRL implementation b/c the RL algorithm may be confounded by performance differences due to number 
+              of weight updates, e.g., hyper parameter of `inner_iter`. By training with iterations (rather than epochs), we ensure independance 
+              of `inner_iter` with sample importance. 
+        '''
 
         if torch.cuda.is_available() & use_cuda: 
             device = 'cuda'
@@ -48,19 +56,20 @@ class DVRL():
 
         model = model.to(device).train()
         optim = torch.optim.Adam(model.parameters(), lr=lr)
-        
-        for i in range(epochs):
-            for batch_idx in torch.split(torch.randperm(x.size(0)), batch_size): 
 
-                x_batch = x[batch_idx, :].to(device)
-                y_batch = y[batch_idx, :].to(device)
+        for i in range(iters):
+            
+            batch_idx = torch.randint(0, x.size(0), size=(batch_size,))
 
-                optim.zero_grad()
-                yhat_batch = model(x_batch)
-                loss = crit(yhat_batch, y_batch)
-                loss.backward() 
-                optim.step()
-                if verbose: print(f'epoch: {i} | loss: {loss.item()}', end='\r')
+            x_batch = x[batch_idx].to(device)
+            y_batch = y[batch_idx].to(device)
+
+            optim.zero_grad()
+            yhat_batch = model(x_batch)
+            loss = crit(yhat_batch, y_batch)
+            loss.backward() 
+            optim.step()
+            if verbose: print(f'epoch: {i} | loss: {loss.item()}', end='\r')
 
         return model.cpu().eval()
 
@@ -70,20 +79,33 @@ class DVRL():
 
         if metric == 'mse': 
             crit = torch.nn.MSELoss()
-            return crit(yhat, y)
+            return crit(yhat, y).item()
+        elif metric == 'r2': 
+            return r2_score(y.detach().cpu().numpy(), yhat.detach().cpu().numpy(), multioutput='uniform_average')
         elif metric == 'bce': 
             crit = torch.nn.BCELoss()
-            return crit(yhat, y)
+            return crit(yhat, y).item()
         elif metric == 'acc': 
-            return ((yhat.argmax(dim=1)).view(-1) == y.view(-1)).sum()/y.size(0)
+            return ((1.*((yhat.argmax(dim=1)).view(-1) == y.view(-1))).mean()).item()
         elif metric == 'auroc': 
-            # only applies to binary classification
-            return roc_auc_score(y.detach().cpu().numpy().ravel(), yhat[:,1].detach().cpu().numpy())
+            y = y.view(-1).detach().cpu().numpy()
+            yhat = torch.softmax(yhat, dim=-1).detach().cpu().numpy()
+
+            if yhat.shape[1] == 2: 
+                # binary classification
+                return roc_auc_score(y, yhat[:,1])
+            elif yhat.shape[1] > 2: 
+                # multiclass 
+                return roc_auc_score(y, yhat, multi_class='ovr')
+            else: 
+                # yhat size == 1; only makes sense for regression - and auroc is for classification 
+                # assumes we're not using BCE
+                raise Exception('is this a regression problem? choose different perf. metric.')
         else: 
             raise Exception('not implemented')
 
     def _predict(self, model, x, y, device='cpu', batch_size=256): 
-        '''return y,yhat for given model,dataset'''
+        '''return y,yhat for given model, dataset'''
         model = model.eval().to(device)
         _yhat = []
         _y = []
@@ -101,13 +123,14 @@ class DVRL():
         '''predict the `val_model` yhat and concat with y; input into estimator'''
 
         if self.problem == 'classification': 
-            y_onehot = torch.nn.functional.one_hot(y.type(dtype=torch.long),num_classes=self.num_classes).type(torch.float).view(x.size(0), -1)
+            y_onehot = torch.nn.functional.one_hot(y.type(dtype=torch.long), num_classes=self.num_classes).type(torch.float).view(x.size(0), -1)
         else: 
             y_onehot = y 
 
         if self.include_marginal:
             with torch.no_grad(): 
-                yhat_valid = val_model(x)
+                yhat_logits = val_model(x)
+                yhat_valid = torch.softmax(yhat_logits, dim=-1)
             
             # marginal calculation as done in DVRL code line 419-421 (https://github.com/google-research/google-research/blob/master/dvrl/dvrl.py)
             if self.problem == 'classification': 
@@ -142,11 +165,11 @@ class DVRL():
                 
                 inp = self._get_endog_and_marginal(x=x_batch, y=y_batch, val_model=val_model)
 
-                data_vals.append(estimator(x=x_batch,y=inp,idx=batch_idx.to(device)).detach().cpu())
+                data_vals.append(estimator(x=x_batch,y=inp).detach().cpu())
                 
         return torch.cat(data_vals, dim=0)
 
-    def run(self, perf_metric, crit_pred, outer_iter=1000, inner_iter=100, outer_batch=2000,  inner_batch=256, estim_lr=1e-2, pred_lr=1e-2, moving_average_window=20, entropy_beta=0.1, entropy_decay=0.99, fix_baseline=False, use_cuda=True, noise_labels=None): 
+    def run(self, perf_metric, crit_pred, outer_iter=1000, inner_iter=100, outer_batch=2000,  inner_batch=256, estim_lr=1e-2, pred_lr=1e-2, moving_average_window=20, fix_baseline=False, use_cuda=True, noise_labels=None): 
         '''
         train the estimator model
 
@@ -168,75 +191,82 @@ class DVRL():
         output 
             data values                     probability of inclusion [0,1]; shape: (nsamples,)
         '''
-        print('pretraining `ori_model` and `val_model` ')
-        ori_model = self.fit(copy.deepcopy(self.predictor), self.x_train, self.y_train, crit_pred, epochs=inner_iter, use_cuda=use_cuda)
-        val_model = self.fit(copy.deepcopy(self.predictor), self.x_valid, self.y_valid, crit_pred, epochs=inner_iter, use_cuda=use_cuda)
-        self.ori_model = ori_model 
-        self.val_model = val_model
 
         if torch.cuda.is_available() & use_cuda: 
             device = 'cuda'
         else: 
             device = 'cpu'
 
+        print('pretraining `ori_model` and `val_model` ')
+        # init. baseline calc
+        # do this a few times to get good estimate.
+        _d = []
+        for i in range(3): 
+            print(f'{i+1}/4', end='\r')
+            ori_model = self.fit(model=copy.deepcopy(self.predictor), x=self.x_train, y=self.y_train, crit=crit_pred, iters=inner_iter, use_cuda=use_cuda, lr=pred_lr, batch_size=inner_batch)
+            _d.append(self._get_perf(model=ori_model.eval(), x=self.x_valid, y=self.y_valid, metric=perf_metric, device=device))
+        print(_d)
+        d = np.mean(_d)
+
+        # for marginal calc
+        val_model = self.fit(model=copy.deepcopy(self.predictor), x=self.x_valid, y=self.y_valid, crit=crit_pred, iters=inner_iter, use_cuda=use_cuda, lr=pred_lr, batch_size=inner_batch)
+        print('4/4')
+        self.val_model = val_model
+
         estimator = self.estimator.to(device).train()
-        ori_model = ori_model.to(device).eval()
         val_model = val_model.to(device).eval()
 
-        # baseline 
-        d = self._get_perf(ori_model.eval(), self.x_valid, self.y_valid, metric=perf_metric, device=device)
-
-        est_optim = torch.optim.Adam(estimator.parameters(), lr=estim_lr) 
+        est_optim = torch.optim.Adam(estimator.parameters(), lr=estim_lr, weight_decay=0) 
 
         for i in range(outer_iter): 
             tic = time.time()
-        
-            outer_idxs = torch.randperm(self.x_train.size(0))[:outer_batch]
-            x = self.x_train[outer_idxs, :]
-            y = self.y_train[outer_idxs, :]
-            x,y = x.to(device), y.to(device).view(-1,1)
 
-            inp = self._get_endog_and_marginal(x=x, y=y, val_model=val_model)
-            p = estimator(x=x,y=inp,idx=outer_idxs.to(device)).view(-1,1)
+            with torch.no_grad(): 
+                #outer_idxs = torch.randint(0, self.x_train.size(0), size=(outer_batch,))
+                outer_idxs = torch.randperm(self.x_train.size(0))[:outer_batch]
+                
+                x = self.x_train[outer_idxs]
+                y = self.y_train[outer_idxs]
+                x = x.to(device)
+                y = y.to(device).view(y.size(0),-1)
+                inp = self._get_endog_and_marginal(x=x, y=y, val_model=val_model)
+            
+            p = estimator(x=x,y=inp).view(-1,1)
             dist = torch.distributions.Bernoulli(probs=p)
             s = dist.sample()
 
             #  select only s=1 train data ; speed up inner loop training 
             s_idx = s.nonzero(as_tuple=True)[0]
 
-            if len(s_idx) == 0: 
-                # could implement regularization term here (toward prob 0.5); but for ease we assume this is an uncommon occurence
-                continue
+            xs = x[s_idx].detach()
+            ys = y[s_idx].detach()
 
-            xs = x[s_idx, :].detach()
-            ys = y[s_idx, :].detach()
-
-             # NOTE:
+            # NOTE:
             # in Algorithm 1 (https://arxiv.org/pdf/1909.11671.pdf) - theta is initialized only once, outside of outer loop; 
             # however, in the dvrl code (https://github.com/google-research/google-research/blob/master/dvrl/dvrl.py; lines 319-320) theta is reinitialized every inner loop. 
             # we follow the DVRL code in this respect. 
             predictor = copy.deepcopy(self.predictor).train().to(device)
-            predictor = self.fit(predictor, xs, ys, crit_pred, inner_batch, pred_lr, inner_iter, use_cuda, verbose=False)
-            dvrl_perf = self._get_perf(predictor, self.x_valid, self.y_valid, metric=perf_metric, device=device)
+            #predictor.reset_parameters()
+            predictor = self.fit(model=predictor, x=xs, y=ys, crit=crit_pred, batch_size=inner_batch, lr=pred_lr, iters=inner_iter, use_cuda=use_cuda, verbose=False)
+            
+            with torch.no_grad(): 
+                dvrl_perf = self._get_perf(model=predictor, x=self.x_valid, y=self.y_valid, metric=perf_metric, device=device)
 
-            # compute reward 
-            if perf_metric in ['mse', 'bce']: 
-                reward = d - dvrl_perf
-            elif perf_metric in ['acc', 'auroc']: 
-                reward = dvrl_perf - d
-            else: 
-                raise Exception('not implemented')
+                # compute reward 
+                if perf_metric in ['mse', 'bce']: 
+                    reward = d - dvrl_perf
+                elif perf_metric in ['acc', 'auroc', 'r2']: 
+                    reward = dvrl_perf - d
+                else: 
+                    raise Exception('not implemented')
 
-            # NOTE: 
-            # divergence from the DVRL algorithm and code
-            # including entropy regularizes the data values and stabilizes training
+            # NOTE: adding entropy regularization may help stabilize training 
             # This [paper](https://arxiv.org/pdf/1811.11214.pdf) recommends that entropy and large learning rates work better. Also, suggests that entropy term decay during training improves convergence to optimal policies. 
             # This [paper](https://arxiv.org/pdf/1602.01783.pdf) originally showed improvements in modern RL approaches with entropy regularization
-            # original dvrl: exploration_weight*(max(p.mean() - exploration_threshold, 0) + max(1-exploration_threshold-p.mean(), 0))
             
             exploration_weight = 1e3
             exploration_threshold = 0.9
-            explore_loss = -entropy_beta*dist.entropy().mean() + exploration_weight*(max(p.mean() - exploration_threshold, 0) + max((1-exploration_threshold)-p.mean(), 0))
+            explore_loss = exploration_weight*(max(p.mean() - exploration_threshold, 0) + max((1-exploration_threshold)-p.mean(), 0))
 
             # NOTE: this is equivalent to torch.sum(s*torch.log(p) + (1-s)*torch.log(1-p))   
             log_prob = dist.log_prob(s).sum()
@@ -247,26 +277,28 @@ class DVRL():
             loss.backward() 
             est_optim.step() 
 
-            # update baseline
-            # NOTE: 
-            # in Algorithm 1 (https://arxiv.org/pdf/1909.11671.pdf) - a moving average baseline is used; 
-            # however, in the code the authors of DVRL do not update the baseline during estimator training. 
-            if not fix_baseline: 
-                d = (moving_average_window - 1)*d/moving_average_window + dvrl_perf/moving_average_window
+            with torch.no_grad(): 
+                # update baseline
+                # NOTE: 
+                # in Algorithm 1 (https://arxiv.org/pdf/1909.11671.pdf) - a moving average baseline is used; 
+                # however, in the code the authors of DVRL do not update the baseline during estimator training. 
+                if not fix_baseline: 
+                    d = (moving_average_window - 1)*d/moving_average_window + dvrl_perf/moving_average_window
 
-            # entropy term decay; set `entropy_decay=1` to use fixed entropy term. 
-            entropy_beta *= entropy_decay
+                # logging 
+                if noise_labels is not None: 
+                    iii = outer_idxs.detach().cpu().numpy()
+                    ppp = 1 - p.detach().cpu().numpy()
+                    auc = roc_auc_score(noise_labels[iii], ppp)
+                    n_corr_sel = int(noise_labels[iii][s_idx.detach().cpu().numpy()].sum())
+                else: 
+                    auc = -1
+                    n_corr_sel = -1
 
-            if noise_labels is not None: 
-                iii = outer_idxs.detach().cpu().numpy()
-                ppp = 1 - p.detach().cpu().numpy()
-                auc = roc_auc_score(noise_labels[iii], ppp)
-            else: 
-                auc = -1
-
-            print(f'outer iteration: {i} || reward: {reward:.4f} || dvrl perf: {dvrl_perf:.4f} || baseline: {d:.4f} || log entropy beta: {np.log10(entropy_beta + 1e-10):.4f} || noise auc: {auc:.2f}|| epoch elapsed: {(time.time() - tic):.1} s', end='\r')
+                print(f'outer iteration: {i} || reward: {reward:.4f} || dvrl perf: {dvrl_perf:.4f} || baseline: {d:.4f} || noise auc: {auc:.2f}|| crpt/tot: {n_corr_sel}/{s_idx.size(0)} [{n_corr_sel/s_idx.size(0):.2f}] || epoch elapsed: {(time.time() - tic):.1} s', end='\r')
 
         # predict final data values 
+        print()
         return self._predict_values(x=self.x_train, y=self.y_train, use_cuda=use_cuda)
 
                 

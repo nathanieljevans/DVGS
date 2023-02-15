@@ -59,7 +59,7 @@ class DVGS():
         dl= torch.cat([x.view(-1) for x in dl])
         return dl
 
-    def run(self, target_crit, source_crit, num_restarts=1, save_dir='./dvgs_results/', similarity=torch.nn.CosineSimilarity(dim=1), optim=torch.optim.Adam, lr=1e-2, num_epochs=100, compute_every=1, target_batch_size=512, source_batch_size=512, num_workers=1, grad_params=None, verbose=True, use_cuda=True): 
+    def run(self, target_crit, source_crit, num_restarts=1, save_dir='./dvgs_results/', similarity=torch.nn.CosineSimilarity(dim=1), optim=torch.optim.Adam, lr=1e-2, num_epochs=100, compute_every=1, target_batch_size=512, source_batch_size=512, grad_params=None, verbose=True, use_cuda=True): 
         '''
         trains the model and returns data values 
 
@@ -73,7 +73,6 @@ class DVGS():
             compute_every                   period to compute gradient similarities, value of 1 will compute every step. 
             target_batch_size               batch_size to use for model "training" on the target dataset; if batch_size > len(self.valid) then batches won't be used. 
             source_batch_size               batch size to use for gradient calculation on the source dataset; reducing this can improve memory foot print. 
-            num_workers                     number of workers to use with the validation dataloader 
             grad_params                     list of parameter names to be used to compute gradient similarity; If None, then all parameters are used. 
             verbose                         if True, will print epoch loss and accuracy 
             use_cuda                        use cuda-enabled GPU if available
@@ -114,8 +113,9 @@ class DVGS():
             for epoch in range(num_epochs): 
                 losses = []
 
-                for idx_target in torch.split(torch.randperm(self.x_target.size(0)), target_batch_size):
-            
+                kk = 0
+                batches = torch.split(torch.randperm(self.x_target.size(0)), target_batch_size)
+                for idx_target in batches:
                     x_target = self.x_target[idx_target, :]
                     y_target = self.y_target[idx_target, :]
                     model.train()
@@ -134,7 +134,6 @@ class DVGS():
                         fmodel, params, buffers = make_functional_with_buffers(model)
                         ft_compute_sample_grad = get_per_sample_grad_func(source_crit, fmodel, device)
                         for idx_source in torch.split(torch.arange(self.x_source.size(0)), source_batch_size): 
-                            _tic = time.time()
                             x_source = self.x_source[idx_source, :]
                             y_source = self.y_source[idx_source, :]
                             x_source, y_source = myto(x_source, y_source, device)
@@ -142,11 +141,11 @@ class DVGS():
                             batch_grads = torch.cat([_g.view(y_source.size(0), -1) for _g, (n,p) in zip(ft_per_sample_grads, model.named_parameters()) if n in grad_params], dim=1)
                             batch_sim = similarity(grad_target.unsqueeze(0).expand(y_source.size(0), -1), batch_grads).detach().cpu()
                             data_vals[j:int(j + y_source.size(0))] = batch_sim 
-                            #print(f'epoch {epoch} || computing sample gradients... [{j}/{self.x_source.size(0)}] ({((time.time()-_tic)/source_batch_size)*self.x_source.size(0)/60:.4f} min/source-epoch)', end='\r')
+                            print(f'[batch:{kk}/{len(batches)}:{int(j/self.x_source.size(0)*100):<3}%]', end='\r')
                             j += y_source.size(0)
                         nn += 1
                         np.save(f'{save_dir}/{self.run_id}/data_value_iter={nn}', data_vals)
-                        elapsed.append(1e6 * (time.time()-tic)/idx_source.size(0)) # micro-seconds 
+                        elapsed.append(1e6 * (time.time()-tic)/self.x_source.size(0)) # micro-seconds 
 
                     # step 3: optimize on target/validation gradient 
                     opt.zero_grad()
@@ -154,9 +153,10 @@ class DVGS():
                     opt.step()
                     losses.append(loss.item())
                     iter += 1
+                    kk += 1
 
                 print(' '*100, end='\r')
-                print(f'[restart: {ii}] iteration {epoch} || avg target loss: {np.mean(losses):.2f} || gradient sim. calc. elapsed / sample: {np.mean(elapsed):.1f} us', end='\r')
+                print(f'\t\t\t [restart: {ii}] iteration {epoch} || avg target loss: {np.mean(losses):.2f} || gradient sim. calc. elapsed / sample: {np.mean(elapsed):.1f} us', end='\r')
 
             print()
         return self.run_id

@@ -7,7 +7,7 @@ from data_loading import load_tabular_data
 
 sys.path.append('../src/')
 from NN import NN 
-from Estimator import Estimator
+from deprecated.NNEst import NNEst
 import similarities
 
 
@@ -15,7 +15,7 @@ import similarities
 # Experiment summary 
 ##################################
 
-summary="This experiment measures the ability of (4) methods for capturing label corruption in the adult dataset."
+summary="This experiment measures the ability of (4) methods for capturing exogenous noise in the adult dataset (supervised)."
 
 #################
 # General params 
@@ -24,27 +24,14 @@ summary="This experiment measures the ability of (4) methods for capturing label
 # options: "adult", "blog", "cifar10",
 dataset = "adult"
 
-# encode x into reduced representation;
-encoder_model = None
-
 # learning algorithm to use 
-# NOTE: predicted outputs are logits, use softmax to convert to probs 
-#       this is because pytorch cross entropy takes unnormalized values in 
-model = NN(in_channels      = 108, 
-           out_channels     = 2, 
-           num_layers       = 2, 
-           hidden_channels  = 100, 
-           norm             = True, 
-           dropout          = 0.5, 
-           bias             = True, 
-           act              = torch.nn.Mish, 
-           out_fn           = None)
+model = NN(in_channels=108, out_channels=2, num_layers=2, hidden_channels=100, norm=True, dropout=0.5, bias=True, act=torch.nn.Mish, out_fn=None)
 
 # label corruption of endogenous variable (y)
-endog_noise = 0.2
+endog_noise = 0.
 
 # guassian noise rate (standard deviation) in exogenous variable (x) 
-exog_noise = 0.
+exog_noise = 3.
 
 ## number of training/source observations 
 train_num = 1000 
@@ -53,7 +40,7 @@ train_num = 1000
 valid_num = 400
 
 # output paths 
-out_dir = '../results/exp1/'
+out_dir = '../results/exp4/'
 
 # whether to delete the data on disk after reading into memory 
 cleanup_data = True
@@ -70,7 +57,7 @@ filter_kwargs = {
                 "crit"          : lambda x,y: torch.nn.functional.cross_entropy(x,y.squeeze(1).type(torch.long)),
 
                 # reported performance metric  
-                "metric"        : lambda y,yhat: roc_auc_score(y, torch.softmax(torch.tensor(yhat), dim=-1)[:, 1].detach().numpy()), 
+                "metric"        : lambda y,yhat: roc_auc_score(y, yhat[:, 1]) , 
 
                 # filter quantiles 
                 "qs"            : np.linspace(0., 0.5, 10), 
@@ -100,19 +87,19 @@ loo_kwargs = {
                 "model"           : copy.deepcopy(model),
 
                 # performance metric 
-                "metric"        : lambda y,yhat: roc_auc_score(y, torch.softmax(torch.tensor(yhat), dim=-1)[:, 1].detach().numpy()),    
+                "metric"        : lambda y,yhat: roc_auc_score(y, yhat[:, 1]),    
 
                 # loss criteria
-                "crit"          : lambda x,y: torch.nn.functional.cross_entropy(x, y.squeeze(1).type(torch.long)),  
+                "crit"          : lambda x,y: torch.nn.functional.cross_entropy(x,y.squeeze(1).type(torch.long)),  
 
                 # optimizer 
                 "optim"         : torch.optim.Adam, 
 
                 # number of optimizer iterations 
-                "epochs"        : 200, 
+                "epochs"        : 100, 
 
                 # optimizer step size 
-                "lr"            : 1e-4,
+                "lr"            : 1e-3,
 
                 # batch size for stochastic gradient descent 
                 "batch_size"    : 250, 
@@ -142,10 +129,10 @@ dshap_init = {
                 "crit"            : lambda x,y: torch.nn.functional.cross_entropy(x,y.squeeze(1).type(torch.long)),
 
                 # performance metric 
-                "perf_metric"     : lambda y,yhat: roc_auc_score(y, torch.softmax(torch.tensor(yhat), dim=-1)[:, 1].detach().numpy()),
+                "perf_metric"     : lambda y, yhat: roc_auc_score(y, yhat[:, 1]),
 
                 # number of epochs to train each model for 
-                "epochs"          : 200,
+                "epochs"          : 100,
 
                 # Truncation criteria; stops the chain when performance is within `tol` of vD (valid perf) for T iterations in a row.
                 "tol"             : 0.03,
@@ -154,7 +141,7 @@ dshap_init = {
                 "optim"           : torch.optim.Adam,
 
                 # optimizer learning-rate/step-size 
-                "lr"              : 1e-4,
+                "lr"              : 1e-3,
 
                 # console verbosity 
                 "verbose"         : True
@@ -182,15 +169,7 @@ dshap_run = {
 # Data valuation with reinfocement learning (DVRL) params 
 ####################################################################
 
-estimator = Estimator(xin               = 108, 
-                      yin               = 4, 
-                      y_cat_dim         = 10, 
-                      num_layers        = 5, 
-                      hidden_channels   = 100, 
-                      norm              = False, 
-                      dropout           = 0., 
-                      act               = torch.nn.ReLU)
-
+estimator = NNEst(xin=108, yin=4, y_cat_dim=200, out_channels=1, num_layers=4, hidden_channels=100, norm=False, dropout=0.0, bias=True, act=torch.nn.ReLU)
 
 dvrl_init = { 
                 "predictor"         : copy.deepcopy(model), 
@@ -202,15 +181,20 @@ dvrl_init = {
 
 dvrl_run = { 
                 "perf_metric"            : 'auroc', 
-                "crit_pred"              : lambda yhat,y: torch.nn.functional.cross_entropy(yhat, y.squeeze(1)), 
-                "outer_iter"             : 2000, 
+                "crit_pred"              : lambda x,y: torch.nn.functional.cross_entropy(x,y.squeeze(1).type(torch.long)), 
+                "outer_iter"             : 1000, 
                 "inner_iter"             : 100, 
                 "outer_batch"            : 1000, 
-                "inner_batch"            : 256, 
-                "estim_lr"               : 1e-2, 
-                "pred_lr"                : 1e-3, 
+                "inner_batch"            : 250, 
+                "estim_lr"               : 1e-4, 
+                "pred_lr"                : 5e-3, 
+                "moving_average_window"  : 50,
+                "entropy_beta"           : 0.1, 
+                "entropy_decay"          : 0.999,
                 "fix_baseline"           : True,
+                "noise_labels"           : None,
                 "use_cuda"               : True,
+                "center_logits"          : True
             }
 
 ####################################################################
@@ -229,12 +213,12 @@ dvgs_kwargs = {
                 "num_restarts"          : 3,
                 "save_dir"              : f'{out_dir}/dvgs/',
                 "similarity"            : similarities.cosine_similarity(),
-                "optim"                 : torch.optim.Adam, 
-                "lr"                    : 1e-3, 
-                "num_epochs"            : 100, 
+                "optim"                 : torch.optim.SGD, 
+                "lr"                    : 5e-2, 
+                "num_epochs"            : 200, 
                 "compute_every"         : 1, 
-                "source_batch_size"     : 400, 
-                "target_batch_size"     : 500,
+                "source_batch_size"     : 500, 
+                "target_batch_size"     : 400,
                 "grad_params"           : None, 
                 "verbose"               : True, 
                 "use_cuda"              : True

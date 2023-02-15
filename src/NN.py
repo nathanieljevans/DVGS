@@ -7,7 +7,7 @@ class NN(torch.nn.Module):
         super().__init__()
 
         seq = []
-        norm = torch.nn.InstanceNorm1d
+        norm_type = torch.nn.InstanceNorm1d
 
         # first layer 
         if in_channels is not None: 
@@ -19,17 +19,12 @@ class NN(torch.nn.Module):
         seq.append(act())
 
         for l in range(num_layers - 1): 
-            if norm: seq.append(norm(hidden_channels))
+            if norm: seq.append(norm_type(hidden_channels))
             seq.append(torch.nn.Linear(hidden_channels, hidden_channels, bias=bias))
             seq.append(torch.nn.Dropout(dropout))
             seq.append(act())
             
-        # output layer
-        #seq.append(torch.nn.Linear(hidden_channels, 10, bias=bias))
-        #seq.append(act())
-        #if norm: seq.append(norm(10))
-        #seq.append(torch.nn.Linear(10, out_channels, bias=bias))
-        if norm: seq.append(norm(hidden_channels))
+        if norm: seq.append(norm_type(hidden_channels))
         seq.append(torch.nn.Linear(hidden_channels, out_channels, bias=bias))
 
         if out_fn is not None:
@@ -38,16 +33,12 @@ class NN(torch.nn.Module):
 
         self.f = torch.nn.Sequential(*seq)
 
-    def reset_parameters(self, gain=1): 
-        with torch.no_grad(): 
-            for layer in self.f.children():
-                weights_init(layer, gain=gain)
-
     def forward(self, x, y=None, idx=None): 
-        if y is not None: 
-            x = torch.cat((x,y), dim=1)
         return self.f(x)
 
-def weights_init(m, gain=1):
-    if isinstance(m, torch.nn.Linear):
-        torch.nn.init.xavier_uniform_(m.weight.data, gain=gain)
+    def reset_parameters(self): 
+        self.apply(weight_reset)
+
+def weight_reset(m):
+    if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear) or isinstance(m, torch.nn.ConvTranspose2d):
+        m.reset_parameters()

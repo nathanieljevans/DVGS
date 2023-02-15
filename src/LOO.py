@@ -87,6 +87,7 @@ class LOO:
             if self.verbose: 
                 print(f'[progress: {exclude_idx}/{self.x_train.size(0)}]', end='\r')
             include_idx = np.delete(np.arange(self.x_train.size(0)), [exclude_idx])
+            print(len(include_idx))
 
             x = self.x_train[include_idx, :]
             y = self.y_train[include_idx, :]

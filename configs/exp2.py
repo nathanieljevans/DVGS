@@ -15,14 +15,14 @@ import similarities
 # Experiment summary 
 ##################################
 
-summary="This experiment measures the ability of (4) methods for capturing label corruption in the adult dataset."
+summary="This experiment measures the ability of (4) methods for capturing label corruption in the blog dataset."
 
 #################
 # General params 
 #################
 
 # options: "adult", "blog", "cifar10",
-dataset = "adult"
+dataset = "blog"
 
 # encode x into reduced representation;
 encoder_model = None
@@ -30,7 +30,7 @@ encoder_model = None
 # learning algorithm to use 
 # NOTE: predicted outputs are logits, use softmax to convert to probs 
 #       this is because pytorch cross entropy takes unnormalized values in 
-model = NN(in_channels      = 108, 
+model = NN(in_channels      = 280, 
            out_channels     = 2, 
            num_layers       = 2, 
            hidden_channels  = 100, 
@@ -53,7 +53,7 @@ train_num = 1000
 valid_num = 400
 
 # output paths 
-out_dir = '../results/exp1/'
+out_dir = '../results/exp2/'
 
 # whether to delete the data on disk after reading into memory 
 cleanup_data = True
@@ -182,7 +182,7 @@ dshap_run = {
 # Data valuation with reinfocement learning (DVRL) params 
 ####################################################################
 
-estimator = Estimator(xin               = 108, 
+estimator = Estimator(xin               = 280, 
                       yin               = 4, 
                       y_cat_dim         = 10, 
                       num_layers        = 5, 

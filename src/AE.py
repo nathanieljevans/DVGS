@@ -27,15 +27,14 @@ class AE(torch.nn.Module):
                             act=act, 
                             out_fn=None)
 
-    def reset_parameters(self, gain=1): 
-        with torch.no_grad(): 
-            for layer in self.children():
-                weights_init(layer, gain=gain)
+    def reset_parameters(self): 
+        self.apply(weight_reset)
 
     def forward(self, x): 
         z = self.encoder(x)
-        return self.decoder(z)
+        x = self.decoder(z)
+        return x
 
-def weights_init(m, gain=1):
-    if isinstance(m, torch.nn.Linear):
-        torch.nn.init.xavier_normal_(m.weight.data, gain=gain)
+def weight_reset(m):
+    if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear) or isinstance(m, torch.nn.ConvTranspose2d):
+        m.reset_parameters()

@@ -26,14 +26,9 @@ see `/configs` for details.
 
 ## `LINCS` data valuation 
 
-Should take about ~8 hours on a GPU (requires less than 4GB vram).
 
 ```bash
-
 (dvgs) $ ./lincs_setup.sh 
-(dvgs) $ cd src 
-(dvgs) $ python run_lincs_dvgs.py --data ../data/ --out ../lincs_results --epochs 25 --lr 1e-3 --compute_every 5 --target_batch_size 2000 --source_batch_size 50 --do 0.2 --num_layers 2 --latent_channels 64 --hidden_channels 500
-
 ```
 
 # References 

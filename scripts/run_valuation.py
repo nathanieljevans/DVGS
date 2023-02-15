@@ -12,6 +12,7 @@ import pandas as pd
 import hashlib
 import os
 import copy 
+import pickle as pkl
 
 import sys 
 sys.path.append('../src/')
@@ -20,6 +21,23 @@ from DVGS import DVGS
 from DVRL import DVRL
 from DShap import DShap
 from LOO import LOO
+
+def _encode(x, model, batch_size=100, use_gpu=True): 
+
+    if torch.cuda.is_available() & use_gpu:
+        device = 'cuda'
+    else: 
+        device = 'cpu' 
+
+    with torch.no_grad(): 
+        model = model.eval().to(device)
+        z = []
+        for x_idx in torch.split(torch.arange(x.size(0)), batch_size): 
+            print(f'encoding x data... progress: {100*x_idx[-1]/x.size(0):.0f}%', end='\r')
+            z.append(model(x[x_idx].to(device)).cpu())
+        print()
+        z = torch.cat(z, dim=0)
+    return z
 
 def get_args(): 
     parser = argparse.ArgumentParser()
@@ -55,13 +73,19 @@ if __name__ == '__main__':
 
     # LOAD DATA  
     print('loading data...')
-    x_train, y_train, x_valid, y_valid, x_test, y_test, exog_noise, endog_noise = load_data(dataset     = config.dataset, 
-                                                                                            train_num   = config.train_num, 
-                                                                                            valid_num   = config.valid_num, 
-                                                                                            exog_noise  = config.exog_noise, 
-                                                                                            endog_noise = config.endog_noise, 
-                                                                                            save_dir    = f'{config.out_dir}/data/{uid}', 
-                                                                                            clean_up    = config.cleanup_data)
+    x_train, y_train, x_valid, y_valid, x_test, y_test, exog_noise, endog_noise, kwargs = load_data(dataset     = config.dataset, 
+                                                                                                    train_num   = config.train_num, 
+                                                                                                    valid_num   = config.valid_num, 
+                                                                                                    exog_noise  = config.exog_noise, 
+                                                                                                    endog_noise = config.endog_noise, 
+                                                                                                    save_dir    = f'{config.out_dir}/data/', 
+                                                                                                    clean_up    = config.cleanup_data,
+                                                                                                    transforms  = config.transforms)
+
+    if config.encoder_model is not None: 
+        x_train = _encode(x_train, config.encoder_model)                                                                          
+        x_valid = _encode(x_valid, config.encoder_model)                                                                          
+        x_test = _encode(x_test, config.encoder_model)    
 
     print('train size:')    
     print('\tx:', x_train.shape)                                                                                    
@@ -72,7 +96,7 @@ if __name__ == '__main__':
     print('test size:')    
     print('\tx:', x_test.shape)                                                                                    
     print('\ty:', y_test.shape)   
-    print()                                                                                 
+    print()                                                                      
 
     # VALUATION  
     print('running data valuation...')
@@ -81,12 +105,12 @@ if __name__ == '__main__':
 
         dvgs = DVGS(x_source         = x_train,
                     y_source         = y_train, 
-                    x_target         = x_train,  
-                    y_target         = y_train, 
+                    x_target         = x_valid,  
+                    y_target         = y_valid, 
                     model            = copy.deepcopy(config.model))
 
         if config.dvgs_balance_class_weights: 
-            class_weights = torch.tensor(compute_class_weight(class_weight='balanced', classes=list(np.sort(np.unique(y_train.detach().numpy()))), y=y_train.detach().numpy().ravel()), dtype=torch.float).to('cuda')
+            class_weights = torch.tensor(compute_class_weight(class_weight='balanced', classes=list(np.sort(np.unique(y_train.detach().numpy()))), y=y_valid.detach().numpy().ravel()), dtype=torch.float).to('cuda')
             CEL = torch.nn.CrossEntropyLoss(weight=class_weights) 
             config.dvgs_kwargs["target_crit"] = lambda x,y: CEL(x,y.squeeze(1).type(torch.long))
             config.dvgs_kwargs["source_crit"] = lambda x,y: torch.nn.functional.cross_entropy(x,y.squeeze(1).type(torch.long))
@@ -104,11 +128,10 @@ if __name__ == '__main__':
                     x_valid       = x_valid,
                     y_valid       = y_valid, **config.dvrl_init)
 
-        CEL = torch.nn.CrossEntropyLoss() 
         print()
 
         tic = time.time() 
-        vals = dvrl.run(**config.dvrl_run).detach().cpu().numpy().ravel()
+        vals = dvrl.run(**config.dvrl_run, noise_labels=endog_noise).detach().cpu().numpy().ravel()
 
     elif args.method == 'dshap': 
 
@@ -132,8 +155,13 @@ if __name__ == '__main__':
 
         vals = np.random.randn(x_train.size(0))
 
+    elif args.method == 'apc':
+        
+        osig = pd.read_csv('../data/processed/ordered_siginfo.tsv', sep='\t', low_memory=False)
+        vals = osig.APC.fillna(-666).values[kwargs['idx_train']]
+
     else: 
-        raise Exception('unrecognized argument `method`; options: [dvgs, dvrl, dshap, loo, random]')
+        raise Exception('unrecognized argument `method`; options: [dvgs, dvrl, dshap, loo, random, apc]')
 
     print(f'time elapsed: {(time.time() - tic)/60:.2f} min')
     print()
@@ -172,5 +200,9 @@ if __name__ == '__main__':
     else: 
         res.to_csv(config.out_dir + '/results.csv', mode='w', sep='\t', index=False)
     print()
+
+    if kwargs is not None: 
+        with open(config.out_dir + '/data_values/' + str(uid) + '/kwarg_dict.pkl', 'wb') as f: 
+            pkl.dump(kwargs, f)
 
     print('data valuation complete.')
