@@ -9,7 +9,7 @@ from data_loading import load_tabular_data
 sys.path.append('../src/')
 from NN import NN 
 from Estimator import Estimator
-from MyResNet import MyResNet
+from ImageEncoderNet import ImageEncoderNet
 from CNN import CNN
 import similarities
 
@@ -28,7 +28,7 @@ summary="This experiment measures the ability of (2) methods for capturing label
 dataset = "cifar10"
 
 # encode x into reduced representation;
-encoder_model = MyResNet('inception', None, dropout=0.).eval()
+encoder_model = ImageEncoderNet('inception', None, dropout=0.).eval()
 
 # transformations to apply to cifar 
 transforms = torchvision.transforms.Compose([
@@ -57,10 +57,10 @@ endog_noise = 0.2
 exog_noise = 0.
 
 ## number of training/source observations 
-train_num = 4000 
+train_num = 5000 
 
 # number of validation/target observations 
-valid_num = 1000
+valid_num = 2000
 
 # output paths 
 out_dir = '../results/exp3/'
@@ -84,7 +84,7 @@ filter_kwargs = {
                 #"metric"        : lambda y,yhat: roc_auc_score(y, torch.softmax(torch.tensor(yhat), dim=-1), multi_class='ovr') , 
 
                 # filter quantiles 
-                "qs"            : np.linspace(0., 0.5, 10), 
+                "qs"            : np.linspace(0., 0.9, 10), 
 
                 # mini-batch size for SGD  
                 "batch_size"    : 256,
@@ -96,7 +96,7 @@ filter_kwargs = {
                 "epochs"        : 100, 
 
                 # number of technical replicates at each quantile (re-init of model)
-                "repl"          : 2,
+                "repl"          : 3,
 
                 # whether to re-initialize model parameters prior to each train - if repl > 1, should be True
                 "reset_params"  : True
@@ -111,7 +111,7 @@ estimator = Estimator(xin               = 2048,
                       y_cat_dim         = 10, 
                       num_layers        = 5, 
                       hidden_channels   = 100, 
-                      norm              = False, 
+                      norm              = True, 
                       dropout           = 0., 
                       act               = torch.nn.ReLU)
 
@@ -127,12 +127,12 @@ dvrl_run = {
                 "perf_metric"            : 'acc', 
                 "crit_pred"              : lambda yhat,y: torch.nn.functional.cross_entropy(yhat, y.squeeze(1)), 
                 "outer_iter"             : 2000, 
-                "inner_iter"             : 100,  # 250
-                "outer_batch"            : 4000, 
+                "inner_iter"             : 100,  
+                "outer_batch"            : 5000, 
                 "inner_batch"            : 256, 
                 "estim_lr"               : 1e-2, 
                 "pred_lr"                : 1e-3, 
-                "moving_average_window"  : 50,
+                "moving_average_window"  : 100,
                 "fix_baseline"           : False,
                 "use_cuda"               : True,
             }

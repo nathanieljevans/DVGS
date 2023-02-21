@@ -8,6 +8,7 @@ class Estimator(torch.nn.Module):
         super().__init__()
 
         self.cnn = cnn
+        self.yin = yin
 
         if cnn is None: 
             self.f1 = NN(in_channels=xin, out_channels=y_cat_dim, num_layers=int(num_layers-2), 
@@ -28,7 +29,9 @@ class Estimator(torch.nn.Module):
             x = x.view(x.size(0), -1)
             z = self.f1(x)
 
-        z = torch.cat((z, y), dim=1)
+        if self.yin > 0: 
+            z = torch.cat((z, y), dim=1)
+        
         out = self.f_out(z) 
         return torch.sigmoid(out + self.b)
 

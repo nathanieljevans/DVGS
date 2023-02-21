@@ -1,4 +1,5 @@
 import torch 
+import torchvision
 import sys 
 import copy 
 from sklearn.metrics import roc_auc_score, r2_score
@@ -7,10 +8,11 @@ from data_loading import load_tabular_data
 
 sys.path.append('../src/')
 from NN import NN 
-from deprecated.NNEst import NNEst
+from CNN import CNN
 from CNNAE import CNNAE
-from MyResNet18 import MyResNet18
+from Estimator import Estimator
 import similarities
+from utils import train_model
 
 
 ##################################
@@ -26,21 +28,28 @@ summary="This experiment measures the ability of (2) methods for capturing exoge
 # options: "adult", "blog", "cifar10", 'cifar10-unsupervised'
 dataset = "cifar10-unsupervised"
 
+encoder_model = None 
+transforms =  torchvision.transforms.Compose([
+                torchvision.transforms.Resize(32),
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.2469, 0.2434, 0.2615])
+            ])
+
 # learning algorithm to use 
-model = CNNAE(in_channels=3, hidden_channels=32, latent_channels=10, act=torch.nn.Mish)
+model = CNNAE(in_channels=3, hidden_channels=32, latent_channels=10, act=torch.nn.Mish, dropout=0.)
 
 # label corruption of endogenous variable (y)
 endog_noise = 0.
 
 # max guassian noise rate (standard deviation) in exogenous variable (x) 
 # each sample will be assigned a random gaussian std noise rate sampled from a uniform dist between [0, exog_noise]
-exog_noise = 3.
+exog_noise = 5.
 
 ## number of training/source observations 
-train_num = 40000 
+train_num = 20000 
 
 # number of validation/target observations 
-valid_num = 10000
+valid_num = 2000
 
 # output paths 
 out_dir = '../results/exp7/'
@@ -60,22 +69,23 @@ filter_kwargs = {
                 "crit"          : torch.nn.MSELoss(),
 
                 # reported performance metric  
+                #"metric"        : lambda y,yhat: -(np.mean((y - yhat)**2)**(0.5)) ,  # -rmse, bigger is better
                 "metric"        : lambda y,yhat: r2_score(y.ravel(), yhat.ravel()) , 
 
                 # filter quantiles 
-                "qs"            : np.linspace(0., 0.5, 10), 
+                "qs"            : np.linspace(0., 0.9, 10), 
 
                 # mini-batch size for SGD 
-                "batch_size"    : 1000,
+                "batch_size"    : 256,
 
                 # learning rate 
                 "lr"            : 1e-3, 
 
                 # number of training epochs 
-                "epochs"        : 25, 
+                "epochs"        : 100, 
 
                 # number of technical replicates at each quantile (re-init of model)
-                "repl"          : 2,
+                "repl"          : 3,
 
                 # whether to re-initialize model parameters prior to each train - if repl > 1, should be True
                 "reset_params"  : True
@@ -85,34 +95,37 @@ filter_kwargs = {
 # Data valuation with reinfocement learning (DVRL) params 
 ####################################################################
 
-resnet = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', weights="ResNet18_Weights.DEFAULT")
-resnet.fc = torch.nn.Linear(512, 100)
-estimator = NNEst(xin=100, yin=20, y_cat_dim=100, out_channels=1, num_layers=4, hidden_channels=100, norm=False, dropout=0.0, bias=True, act=torch.nn.ReLU, cnn=resnet)
+
+estimator = Estimator(xin=50, 
+                      yin=0, 
+                      y_cat_dim=50, 
+                      num_layers=3, 
+                      hidden_channels=100, 
+                      norm=False, 
+                      dropout=0.0, 
+                      act=torch.nn.ReLU, 
+                      cnn=CNN(in_conv=3, out_conv=64, out_channels=50, kernel_size=3, act=torch.nn.ReLU))
 
 dvrl_init = { 
                 "predictor"         : copy.deepcopy(model), 
                 "estimator"         : estimator, 
-                "problem"           : 'classification',
-                "include_marginal"  : True
+                "problem"           : 'regression',
+                "include_marginal"  : False
             }
 
 
 dvrl_run = { 
-                "perf_metric"            : 'mse', 
+                "perf_metric"            : 'r2', 
                 "crit_pred"              : torch.nn.MSELoss(), 
-                "outer_iter"             : 1000, 
-                "inner_iter"             : 25, 
-                "outer_batch"            : 50000, 
-                "inner_batch"            : 1000, 
-                "estim_lr"               : 1e-4, 
+                "outer_iter"             : 2000, 
+                "inner_iter"             : 100, 
+                "outer_batch"            : 3000, 
+                "inner_batch"            : 256, 
+                "estim_lr"               : 5e-3, 
                 "pred_lr"                : 1e-3, 
-                "moving_average_window"  : 50,
-                "entropy_beta"           : 0., 
-                "entropy_decay"          : 1.,
-                "fix_baseline"           : True,
-                "noise_labels"           : None,
+                "moving_average_window"  : 100,
+                "fix_baseline"           : False,
                 "use_cuda"               : True,
-                "center_logits"          : True
             }
 
 ####################################################################
@@ -123,7 +136,7 @@ dvrl_run = {
 dvgs_balance_class_weights = False
 
 # remove interim gradient similarities 
-dvgs_clean_gradient_sims = True
+dvgs_clean_gradient_sims = False
 
 dvgs_kwargs = { 
                 "target_crit"           : torch.nn.MSELoss(), 
@@ -133,10 +146,10 @@ dvgs_kwargs = {
                 "similarity"            : similarities.cosine_similarity(),
                 "optim"                 : torch.optim.Adam, 
                 "lr"                    : 1e-3, 
-                "num_epochs"            : 25, 
+                "num_epochs"            : 1000, 
                 "compute_every"         : 1, 
                 "source_batch_size"     : 50, 
-                "target_batch_size"     : 2000,
+                "target_batch_size"     : 1000,
                 "grad_params"           : None, 
                 "verbose"               : True, 
                 "use_cuda"              : True

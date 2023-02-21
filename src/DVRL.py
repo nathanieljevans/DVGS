@@ -81,7 +81,7 @@ class DVRL():
             crit = torch.nn.MSELoss()
             return crit(yhat, y).item()
         elif metric == 'r2': 
-            return r2_score(y.detach().cpu().numpy(), yhat.detach().cpu().numpy(), multioutput='uniform_average')
+            return r2_score(y.detach().cpu().numpy().ravel(), yhat.detach().cpu().numpy().ravel(), multioutput='uniform_average')
         elif metric == 'bce': 
             crit = torch.nn.BCELoss()
             return crit(yhat, y).item()
@@ -228,7 +228,7 @@ class DVRL():
                 x = self.x_train[outer_idxs]
                 y = self.y_train[outer_idxs]
                 x = x.to(device)
-                y = y.to(device).view(y.size(0),-1)
+                y = y.to(device) #.view(y.size(0),-1)
                 inp = self._get_endog_and_marginal(x=x, y=y, val_model=val_model)
             
             p = estimator(x=x,y=inp).view(-1,1)

@@ -51,7 +51,12 @@ echo 'APC calc complete.'
 echo 'starting lincs preprocessing...'
 
 # NOTE: remove `--zscore` to use raw data.
-[ ! -d "$LINCS_DIR/data.h5" ] && python ./lincs_preproc.py --data $ROOT --apc_dir $APC_DIR --out $LINCS_DIR --zscore
+[ ! -f "$LINCS_DIR/lincs.h5" ] && echo 'running `lincs_prepoc.py`'
+[ ! -f "$LINCS_DIR/lincs.h5" ] && python ./lincs_preproc.py --data $ROOT --apc_dir $APC_DIR --out $LINCS_DIR --zscore
+
+# for experiment 10
+[ ! -f "$LINCS_DIR/osig_indexed.tsv" ] && echo 'running `lincs_preproc2.py`'
+[ ! -f "$LINCS_DIR/osig_indexed.tsv" ] && python ./lincs_preproc2.py --data $ROOT --out $ROOT/processed/ 
 
 echo 'lincs setup complete.'
 

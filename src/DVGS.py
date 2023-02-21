@@ -10,6 +10,7 @@ from uuid import uuid4
 from os import listdir, mkdir
 from os.path import exists
 from shutil import rmtree
+from scipy.stats import percentileofscore
 
 class DVGS(): 
 
@@ -59,7 +60,7 @@ class DVGS():
         dl= torch.cat([x.view(-1) for x in dl])
         return dl
 
-    def run(self, target_crit, source_crit, num_restarts=1, save_dir='./dvgs_results/', similarity=torch.nn.CosineSimilarity(dim=1), optim=torch.optim.Adam, lr=1e-2, num_epochs=100, compute_every=1, target_batch_size=512, source_batch_size=512, grad_params=None, verbose=True, use_cuda=True): 
+    def run(self, target_crit, source_crit, num_restarts=1, save_dir='./dvgs_results/', similarity=torch.nn.CosineSimilarity(dim=1), optim=torch.optim.Adam, lr=1e-2, num_epochs=100, compute_every=1, target_batch_size=512, source_batch_size=512, grad_params=None, verbose=True, use_cuda=True, uid=None): 
         '''
         trains the model and returns data values 
 
@@ -81,7 +82,12 @@ class DVGS():
             data values     (N_t,N_p)       N_t is number of training samples, N_p is the number of sampled data values (int(num_epochs/compute_every)) 
         '''
         if not exists(save_dir): mkdir(save_dir)
-        self.run_id = uuid4()
+        
+        if uid is None: 
+            self.run_id = uuid4()
+        else: 
+            self.run_id = uid 
+
         mkdir(f'{save_dir}/{self.run_id}')
 
         model = self.model
@@ -104,9 +110,9 @@ class DVGS():
         model.to(device)
 
         nn = 0
-        iter = 0
+        ii = 0
         elapsed = []
-        for ii in range(num_restarts):
+        for _restart in range(num_restarts):
             model.reset_parameters() 
             opt = optim(model.parameters(), lr=lr)
 
@@ -126,7 +132,12 @@ class DVGS():
                     loss = target_crit(yhat_target, y_target)
                     grad_target = self._get_grad(loss, [p for n,p in model.named_parameters() if n in grad_params])
 
-                    if iter%compute_every==0: 
+                    if ii%compute_every==0: 
+
+                        # vmap doesn't support batchnorm in train mode
+                        # use this over .eval() to keep dropout on 
+                        if hasattr(model, "turn_batchnorm_off_"): model.turn_batchnorm_off_()
+
                         tic = time.time()
                         # step 2: for each source/train sample 
                         j = 0
@@ -152,11 +163,11 @@ class DVGS():
                     loss.backward()
                     opt.step()
                     losses.append(loss.item())
-                    iter += 1
-                    kk += 1
+                    
+                    ii += 1; kk += 1
 
                 print(' '*100, end='\r')
-                print(f'\t\t\t [restart: {ii}] iteration {epoch} || avg target loss: {np.mean(losses):.2f} || gradient sim. calc. elapsed / sample: {np.mean(elapsed):.1f} us', end='\r')
+                print(f'\t\t\t [restart: {_restart}] iteration {epoch} || avg target loss: {np.mean(losses):.2f} || gradient sim. calc. elapsed / sample: {np.mean(elapsed):.1f} us', end='\r')
 
             print()
         return self.run_id
@@ -167,6 +178,18 @@ class DVGS():
 
         if reduction == 'none': 
             return np.stack([np.load(f'{path}/{f}').ravel() for f in files], axis=1)
+        
+        elif reduction == 'quantile': 
+            x = None
+            for f in files: 
+                xx = np.load(f'{path}/{f}')
+                r = percentileofscore(xx, xx, kind='rank')
+                if x is None: 
+                    x = r 
+                else: 
+                    x += r 
+            
+            return x/len(files)
         
         elif reduction == 'mean': 
             # NOTE: more memory efficient for large datasets

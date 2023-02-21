@@ -115,7 +115,7 @@ if __name__ == '__main__':
             config.dvgs_kwargs["target_crit"] = lambda x,y: CEL(x,y.squeeze(1).type(torch.long))
             config.dvgs_kwargs["source_crit"] = lambda x,y: torch.nn.functional.cross_entropy(x,y.squeeze(1).type(torch.long))
 
-        run_id = dvgs.run(**config.dvgs_kwargs)
+        run_id = dvgs.run(**config.dvgs_kwargs, uid=uid)
         vals = dvgs.agg(f'{config.out_dir}/dvgs/{run_id}/').ravel()
 
         if config.dvgs_clean_gradient_sims:   

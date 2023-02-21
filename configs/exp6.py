@@ -1,4 +1,5 @@
 import torch 
+import torchvision
 import sys 
 import copy 
 from sklearn.metrics import roc_auc_score
@@ -7,8 +8,9 @@ from data_loading import load_tabular_data
 
 sys.path.append('../src/')
 from NN import NN 
-from deprecated.NNEst import NNEst
-from MyResNet18 import MyResNet18
+from Estimator import Estimator
+from ImageEncoderNet import ImageEncoderNet
+from CNN import CNN
 import similarities
 
 
@@ -16,7 +18,7 @@ import similarities
 # Experiment summary 
 ##################################
 
-summary="This experiment measures the ability of (2) methods for capturing exogenous noise in the cifar dataset (supervised)."
+summary="This experiment measures the ability of (2) methods for capturing exogenous noise in the cifar10 dataset."
 
 #################
 # General params 
@@ -25,21 +27,40 @@ summary="This experiment measures the ability of (2) methods for capturing exoge
 # options: "adult", "blog", "cifar10",
 dataset = "cifar10"
 
+# encode x into reduced representation;
+encoder_model = ImageEncoderNet('inception', None, dropout=0.).eval()
+
+# transformations to apply to cifar 
+transforms = torchvision.transforms.Compose([
+                torchvision.transforms.Resize(299),
+                torchvision.transforms.CenterCrop(299),
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
+
 # learning algorithm to use 
-model = MyResNet18(10)
+#model = MyResNet('resnet50', 10, dropout=0.1)
+model = NN(in_channels      = 2048, 
+           out_channels     = 10, 
+           num_layers       = 2, 
+           hidden_channels  = 100, 
+           norm             = True, 
+           dropout          = 0.5, 
+           bias             = True, 
+           act              = torch.nn.Mish, 
+           out_fn           = None)
 
 # label corruption of endogenous variable (y)
 endog_noise = 0.
 
-# max guassian noise rate (standard deviation) in exogenous variable (x) 
-# each sample will be assigned a random gaussian std noise rate sampled from a uniform dist between [0, exog_noise]
+# guassian noise rate (standard deviation) in exogenous variable (x) 
 exog_noise = 3.
 
 ## number of training/source observations 
-train_num = 40000 
+train_num = 5000 
 
 # number of validation/target observations 
-valid_num = 10000
+valid_num = 2000
 
 # output paths 
 out_dir = '../results/exp6/'
@@ -56,25 +77,26 @@ filter_kwargs = {
                 "model"         : copy.deepcopy(model), 
 
                 # optimizer loss criteria 
-                "crit"          : lambda x,y: torch.nn.functional.cross_entropy(x,y.squeeze(1).type(torch.long)),
+                "crit"          : lambda x,y: torch.nn.functional.cross_entropy(x,y.squeeze(1)),
 
                 # reported performance metric  
-                "metric"        : lambda y,yhat: roc_auc_score(y, torch.softmax(torch.tensor(yhat), dim=-1), multi_class='ovr') , 
+                "metric"        : lambda y,yhat: (1.*(yhat.argmax(axis=1).ravel() == y.ravel())).mean() , 
+                #"metric"        : lambda y,yhat: roc_auc_score(y, torch.softmax(torch.tensor(yhat), dim=-1), multi_class='ovr') , 
 
                 # filter quantiles 
-                "qs"            : np.linspace(0., 0.5, 10), 
+                "qs"            : np.linspace(0., 0.9, 10), 
 
-                # mini-batch size for SGD 
-                "batch_size"    : 1000,
+                # mini-batch size for SGD  
+                "batch_size"    : 256,
 
                 # learning rate 
-                "lr"            : 1e-4, 
+                "lr"            : 1e-3, 
 
                 # number of training epochs 
-                "epochs"        : 25, 
+                "epochs"        : 100, 
 
                 # number of technical replicates at each quantile (re-init of model)
-                "repl"          : 2,
+                "repl"          : 3,
 
                 # whether to re-initialize model parameters prior to each train - if repl > 1, should be True
                 "reset_params"  : True
@@ -84,9 +106,14 @@ filter_kwargs = {
 # Data valuation with reinfocement learning (DVRL) params 
 ####################################################################
 
-resnet = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', weights="ResNet18_Weights.DEFAULT")
-resnet.fc = torch.nn.Linear(512, 100)
-estimator = NNEst(xin=100, yin=20, y_cat_dim=100, out_channels=1, num_layers=4, hidden_channels=100, norm=False, dropout=0.0, bias=True, act=torch.nn.ReLU, cnn=resnet)
+estimator = Estimator(xin               = 2048, 
+                      yin               = 20, 
+                      y_cat_dim         = 10, 
+                      num_layers        = 5, 
+                      hidden_channels   = 100, 
+                      norm              = True, 
+                      dropout           = 0., 
+                      act               = torch.nn.ReLU)
 
 dvrl_init = { 
                 "predictor"         : copy.deepcopy(model), 
@@ -98,20 +125,16 @@ dvrl_init = {
 
 dvrl_run = { 
                 "perf_metric"            : 'acc', 
-                "crit_pred"              : lambda yhat,y: torch.nn.functional.cross_entropy(yhat,y.squeeze(1).type(torch.long)), 
-                "outer_iter"             : 1000, 
-                "inner_iter"             : 25, 
-                "outer_batch"            : 50000, 
-                "inner_batch"            : 1000, 
-                "estim_lr"               : 1e-4, 
-                "pred_lr"                : 1e-4, 
-                "moving_average_window"  : 50,
-                "entropy_beta"           : 0., 
-                "entropy_decay"          : 1.,
-                "fix_baseline"           : True,
-                "noise_labels"           : None,
+                "crit_pred"              : lambda yhat,y: torch.nn.functional.cross_entropy(yhat, y.squeeze(1)), 
+                "outer_iter"             : 2000, 
+                "inner_iter"             : 100,  
+                "outer_batch"            : 5000, 
+                "inner_batch"            : 256, 
+                "estim_lr"               : 1e-2, 
+                "pred_lr"                : 1e-3, 
+                "moving_average_window"  : 100,
+                "fix_baseline"           : False,
                 "use_cuda"               : True,
-                "center_logits"          : True
             }
 
 ####################################################################
@@ -131,11 +154,11 @@ dvgs_kwargs = {
                 "save_dir"              : f'{out_dir}/dvgs/',
                 "similarity"            : similarities.cosine_similarity(),
                 "optim"                 : torch.optim.Adam, 
-                "lr"                    : 1e-4, 
-                "num_epochs"            : 25, 
+                "lr"                    : 1e-3, 
+                "num_epochs"            : 100, 
                 "compute_every"         : 1, 
-                "source_batch_size"     : 50, 
-                "target_batch_size"     : 2000,
+                "source_batch_size"     : 100, 
+                "target_batch_size"     : 500,
                 "grad_params"           : None, 
                 "verbose"               : True, 
                 "use_cuda"              : True

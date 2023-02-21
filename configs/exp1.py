@@ -26,6 +26,7 @@ dataset = "adult"
 
 # encode x into reduced representation;
 encoder_model = None
+transforms = None
 
 # learning algorithm to use 
 # NOTE: predicted outputs are logits, use softmax to convert to probs 

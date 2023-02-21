@@ -14,7 +14,7 @@ def get_resnet(name):
         #return torch.hub.load('pytorch/vision:v0.10.0', 'inception_v3', pretrained=True)
         return torch.hub.load('pytorch/vision:v0.10.0', 'inception_v3', weights="Inception_V3_Weights.DEFAULT")
 
-class MyResNet(torch.nn.Module):
+class ImageEncoderNet(torch.nn.Module):
     def __init__(self, name, out_channels, dropout=0., freeze=False): 
         ''''''
         super().__init__()

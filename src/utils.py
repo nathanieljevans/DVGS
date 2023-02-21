@@ -166,7 +166,11 @@ def load_data(dataset, train_num, valid_num, exog_noise=0., endog_noise=0., save
 
             valid_idx = _idxs[:valid_num]
             test_idx = _idxs[valid_num:]
-            train_idx = np.random.permutation(np.delete(np.arange(len(osig)), _idxs))[:train_num]
+
+            if train_num == -1: 
+                train_idx = np.random.permutation(np.delete(np.arange(len(osig)), _idxs))[:]
+            else:
+                train_idx = np.random.permutation(np.delete(np.arange(len(osig)), _idxs))[:train_num]
 
         train_idx = np.sort(train_idx)
         valid_idx = np.sort(valid_idx)
@@ -185,15 +189,24 @@ def load_data(dataset, train_num, valid_num, exog_noise=0., endog_noise=0., save
 
         kwargs= {'idx_train':train_idx, 'idx_valid':valid_idx, 'idx_test':test_idx}
 
+        # for compatibility later ; kinda hacky
+        endog_noise = np.zeros(x_train.size(0))
+
     else:
         raise Exception('unrecognized dataset name.')
 
     # add gaussian noise 
     if exog_noise > 0: 
-        exog_noise = exog_noise*torch.rand(size=(x_train.size(0),)).view(-1,1)   # exog_noise rates, sampled from uniform dist (max: exog_noise)
+        exog_noise = exog_noise*torch.rand(size=(x_train.size(0),)).view(-1, *([1]*len(x_train.size()[1:])))   # exog_noise rates, sampled from uniform dist (max: exog_noise)
         x_noise = exog_noise*torch.randn_like(x_train)
         x_train += x_noise
         exog_noise = exog_noise.detach().numpy().ravel()
+    else: 
+        exog_noise = None
+
+    if endog_noise.sum() == 0: 
+        endog_noise = None 
+
 
     return x_train.detach(), y_train.detach(), x_valid.detach(), y_valid.detach(), x_test.detach(), y_test.detach(), exog_noise, endog_noise, kwargs
 

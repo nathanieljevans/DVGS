@@ -2,25 +2,22 @@ import torch
 from NN import NN
 
 class CNN(torch.nn.Module):
-    def __init__(self, in_conv, out_conv, out_channels, kernel_size, hidden_channels, norm=True, dropout=0., bias=True, act=torch.nn.ReLU, out_fn=None): 
+    def __init__(self, in_conv, out_conv, out_channels, kernel_size, act=torch.nn.ReLU, conv=None): 
         ''''''
         super().__init__()
-        self.conv = torch.nn.Sequential(torch.nn.Conv2d(in_conv, out_conv, kernel_size), 
-                                        act(),
-                                        torch.nn.MaxPool2d(2,2),
-                                        torch.nn.Conv2d(out_conv, 3*out_conv, kernel_size), 
-                                        act(),
-                                        torch.nn.MaxPool2d(2,2))
 
-        self.fc = NN(in_channels=None, 
-                     out_channels=out_channels, 
-                     num_layers=1, 
-                     hidden_channels=hidden_channels,
-                     dropout=dropout,
-                     norm=norm, 
-                     bias=bias, 
-                     act=act, 
-                     out_fn=out_fn)
+        if conv is None: 
+            self.conv = torch.nn.Sequential(torch.nn.Conv2d(in_conv, out_conv, kernel_size), 
+                                            act(),
+                                            torch.nn.MaxPool2d(2,2),
+                                            torch.nn.Conv2d(out_conv, 3*out_conv, kernel_size), 
+                                            act(),
+                                            torch.nn.MaxPool2d(2,2))
+        else: 
+            # if we want to pretrain conv
+            self.conv = conv 
+
+        self.fc = torch.nn.LazyLinear(out_channels)
 
     def reset_parameters(self, gain=1): 
         with torch.no_grad(): 

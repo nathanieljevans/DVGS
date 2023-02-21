@@ -7,18 +7,17 @@ from data_loading import load_tabular_data
 
 sys.path.append('../src/')
 from NN import NN 
-from deprecated.NNEst import NNEst
 from CNNAE import CNNAE
 from AE import AE
-from MyResNet18 import MyResNet18
 import similarities
+from Estimator import Estimator
 
 
 ##################################
 # Experiment summary 
 ##################################
 
-summary="This experiment measures the ability of (2) methods for capturing "
+summary="This experiment measures the ability of (2) methods for capturing exogenous noise in lincs l1000 data (high APC subset)"
 
 #################
 # General params 
@@ -27,14 +26,16 @@ summary="This experiment measures the ability of (2) methods for capturing "
 # options: "adult", "blog", "cifar10", 'cifar10-unsupervised', 'lincs-hi-apc', 'lincs-hi-apc-target'
 dataset = "lincs-hi-apc"
 
+encoder_model = None 
+transforms = None
+
 # learning algorithm to use 
 model = AE(in_channels      = 978, 
-           num_layers       = 1, 
-           hidden_channels  = 500, 
-           latent_channels  = 50,
-           norm             = True, 
-           dropout          = 0.05, 
-           bias             = True, 
+           num_layers       = 2, 
+           hidden_channels  = 250, 
+           latent_channels  = 32,
+           norm             = False, 
+           dropout          = 0., 
            act              = torch.nn.Mish)
 
 # label corruption of endogenous variable (y)
@@ -48,7 +49,7 @@ exog_noise = 3.
 train_num = 10000 
 
 # number of validation/target observations 
-valid_num = 10000
+valid_num = 5000
 
 # output paths 
 out_dir = '../results/exp8/'
@@ -77,10 +78,10 @@ filter_kwargs = {
                 "batch_size"    : 500,
 
                 # learning rate 
-                "lr"            : 1e-4, 
+                "lr"            : 1e-3, 
 
                 # number of training epochs 
-                "epochs"        : 200, 
+                "epochs"        : 300, 
 
                 # number of technical replicates at each quantile (re-init of model)
                 "repl"          : 1,
@@ -93,7 +94,14 @@ filter_kwargs = {
 # Data valuation with reinfocement learning (DVRL) params 
 ####################################################################
 
-estimator = NN(in_channels=978, out_channels=1, num_layers=2, hidden_channels=200, norm=False, dropout=0., act=torch.nn.ReLU, out_fn=None)
+estimator = Estimator(xin               = 978, 
+                      yin               = 0, 
+                      y_cat_dim         = 10, 
+                      num_layers        = 3, 
+                      hidden_channels   = 100, 
+                      norm              = False, 
+                      dropout           = 0., 
+                      act               = torch.nn.ReLU)
 
 dvrl_init = { 
                 "predictor"         : copy.deepcopy(model), 
@@ -102,23 +110,18 @@ dvrl_init = {
                 "include_marginal"  : False
             }
 
-
 dvrl_run = { 
                 "perf_metric"            : 'r2', 
                 "crit_pred"              : torch.nn.MSELoss(), 
-                "outer_iter"             : 1000, 
+                "outer_iter"             : 2000, 
                 "inner_iter"             : 100, 
-                "outer_batch"            : 50000, 
-                "inner_batch"            : 1000, 
-                "estim_lr"               : 1e-3, 
+                "outer_batch"            : 5000, 
+                "inner_batch"            : 256, 
+                "estim_lr"               : 1e-2, 
                 "pred_lr"                : 1e-3, 
-                "moving_average_window"  : 50,
-                "entropy_beta"           : 0., 
-                "entropy_decay"          : 1.,
-                "fix_baseline"           : True,
-                "noise_labels"           : None,
+                "moving_average_window"  : 100,
+                "fix_baseline"           : False,
                 "use_cuda"               : True,
-                "center_logits"          : True
             }
 
 ####################################################################
@@ -129,17 +132,17 @@ dvrl_run = {
 dvgs_balance_class_weights = False
 
 # remove interim gradient similarities 
-dvgs_clean_gradient_sims = True
+dvgs_clean_gradient_sims = False
 
 dvgs_kwargs = { 
                 "target_crit"           : torch.nn.MSELoss(), 
                 "source_crit"           : torch.nn.MSELoss(),
-                "num_restarts"          : 1,
+                "num_restarts"          : 3,
                 "save_dir"              : f'{out_dir}/dvgs/',
                 "similarity"            : similarities.cosine_similarity(),
                 "optim"                 : torch.optim.Adam, 
                 "lr"                    : 1e-3, 
-                "num_epochs"            : 100, 
+                "num_epochs"            : 500, 
                 "compute_every"         : 1, 
                 "source_batch_size"     : 250, 
                 "target_batch_size"     : 2500,

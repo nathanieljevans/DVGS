@@ -6,11 +6,8 @@ import numpy as np
 from data_loading import load_tabular_data
 
 sys.path.append('../src/')
-from NN import NN 
-from deprecated.NNEst import NNEst
-from CNNAE import CNNAE
+from Estimator import Estimator
 from AE import AE
-from MyResNet18 import MyResNet18
 import similarities
 
 
@@ -18,23 +15,25 @@ import similarities
 # Experiment summary 
 ##################################
 
-summary="This experiment measures the ability of (2) methods for capturing "
+summary="This experiment measures the ability of (1) methods for data valuation on the LINCS L1000 dataset"
 
 #################
 # General params 
 #################
 
 # options: "adult", "blog", "cifar10", 'cifar10-unsupervised', 'lincs-hi-apc-target'
-dataset = "lincs-hi-apc-target"
+dataset = "lincs"
+
+transforms = None 
+encoder_model = None
 
 # learning algorithm to use 
 model = AE(in_channels      = 978, 
-           num_layers       = 1, 
-           hidden_channels  = 500, 
-           latent_channels  = 50,
-           norm             = True, 
-           dropout          = 0.05, 
-           bias             = True, 
+           num_layers       = 2, 
+           hidden_channels  = 256, 
+           latent_channels  = 64,
+           norm             = False, 
+           dropout          = 0.0, 
            act              = torch.nn.Mish)
 
 # label corruption of endogenous variable (y)
@@ -45,10 +44,10 @@ endog_noise = 0.
 exog_noise = 0.
 
 ## number of training/source observations 
-train_num = 10000 
+train_num = -1 
 
 # number of validation/target observations 
-valid_num = 10000
+valid_num = 5000
 
 # output paths 
 out_dir = '../results/exp9/'
@@ -74,13 +73,13 @@ filter_kwargs = {
                 "qs"            : np.linspace(0., 0.95, 10), 
 
                 # mini-batch size for SGD 
-                "batch_size"    : 500,
+                "batch_size"    : 1024,
 
                 # learning rate 
-                "lr"            : 1e-4, 
+                "lr"            : 1e-3, 
 
                 # number of training epochs 
-                "epochs"        : 200, 
+                "epochs"        : 50, 
 
                 # number of technical replicates at each quantile (re-init of model)
                 "repl"          : 1,
@@ -93,8 +92,14 @@ filter_kwargs = {
 # Data valuation with reinfocement learning (DVRL) params 
 ####################################################################
 
-estimator = NN(in_channels=978, out_channels=1, num_layers=2, hidden_channels=200, norm=False, dropout=0., act=torch.nn.ReLU, out_fn=None)
-
+estimator = Estimator(xin               = 978, 
+                      yin               = 0, 
+                      y_cat_dim         = 10, 
+                      num_layers        = 3, 
+                      hidden_channels   = 100, 
+                      norm              = False, 
+                      dropout           = 0., 
+                      act               = torch.nn.ReLU)
 dvrl_init = { 
                 "predictor"         : copy.deepcopy(model), 
                 "estimator"         : estimator, 
@@ -106,19 +111,15 @@ dvrl_init = {
 dvrl_run = { 
                 "perf_metric"            : 'r2', 
                 "crit_pred"              : torch.nn.MSELoss(), 
-                "outer_iter"             : 1000, 
+                "outer_iter"             : 2000, 
                 "inner_iter"             : 100, 
-                "outer_batch"            : 50000, 
-                "inner_batch"            : 1000, 
+                "outer_batch"            : 10000, 
+                "inner_batch"            : 500, 
                 "estim_lr"               : 1e-3, 
                 "pred_lr"                : 1e-3, 
-                "moving_average_window"  : 50,
-                "entropy_beta"           : 0., 
-                "entropy_decay"          : 1.,
-                "fix_baseline"           : True,
-                "noise_labels"           : None,
+                "moving_average_window"  : 100,
+                "fix_baseline"           : False,
                 "use_cuda"               : True,
-                "center_logits"          : True
             }
 
 ####################################################################
@@ -139,10 +140,10 @@ dvgs_kwargs = {
                 "similarity"            : similarities.cosine_similarity(),
                 "optim"                 : torch.optim.Adam, 
                 "lr"                    : 1e-3, 
-                "num_epochs"            : 100, 
+                "num_epochs"            : 500, 
                 "compute_every"         : 1, 
                 "source_batch_size"     : 250, 
-                "target_batch_size"     : 2500,
+                "target_batch_size"     : 5000,
                 "grad_params"           : None, 
                 "verbose"               : True, 
                 "use_cuda"              : True
