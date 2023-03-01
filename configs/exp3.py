@@ -63,7 +63,7 @@ train_num = 5000
 valid_num = 2000
 
 # output paths 
-out_dir = '../results/exp3/'
+out_dir = '../results/exp3-2/'
 
 # whether to delete the data on disk after reading into memory 
 cleanup_data = False
@@ -124,7 +124,7 @@ dvrl_init = {
 
 
 dvrl_run = { 
-                "perf_metric"            : 'acc', 
+                "perf_metric"            : 'auroc', 
                 "crit_pred"              : lambda yhat,y: torch.nn.functional.cross_entropy(yhat, y.squeeze(1)), 
                 "outer_iter"             : 2000, 
                 "inner_iter"             : 100,  

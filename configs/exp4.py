@@ -227,7 +227,7 @@ dvgs_clean_gradient_sims = True
 dvgs_kwargs = { 
                 "target_crit"           : None, 
                 "source_crit"           : None,
-                "num_restarts"          : 3,
+                "num_restarts"          : 10,
                 "save_dir"              : f'{out_dir}/dvgs/',
                 "similarity"            : similarities.cosine_similarity(),
                 "optim"                 : torch.optim.Adam, 

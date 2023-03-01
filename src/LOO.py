@@ -42,8 +42,8 @@ class LOO:
         for i in range(self.epochs): 
             _loss = []
             for batch_idx in torch.split(torch.randperm(x.size(0)), self.batch_size):
-                x_batch = x[batch_idx, :].to(self.device)
-                y_batch = y[batch_idx, :].to(self.device)
+                x_batch = x[batch_idx].to(self.device)
+                y_batch = y[batch_idx].to(self.device)
 
                 optim.zero_grad() 
                 yhat_batch = model(x_batch)
@@ -87,7 +87,6 @@ class LOO:
             if self.verbose: 
                 print(f'[progress: {exclude_idx}/{self.x_train.size(0)}]', end='\r')
             include_idx = np.delete(np.arange(self.x_train.size(0)), [exclude_idx])
-            print(len(include_idx))
 
             x = self.x_train[include_idx, :]
             y = self.y_train[include_idx, :]
@@ -97,7 +96,10 @@ class LOO:
                 model = self._fit(x, y)
                 perfs.append(self._get_perf(model, self.x_valid, self.y_valid))
             perf = np.mean(perfs)
-            data_values.append(perf - self.baseline)
+
+            # if removing sample improves performance, then that sample should have negative data value 
+            # if removing sample decreases performance, then that sample should have positive data value 
+            data_values.append(self.baseline - perf)
 
         return data_values
 

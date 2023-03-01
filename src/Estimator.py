@@ -19,9 +19,10 @@ class Estimator(torch.nn.Module):
                                                            
         self.f_out  =  torch.nn.Sequential(*seq)
 
-        self.b = torch.nn.Parameter(torch.tensor([0.]))
-
-    def forward(self, x, y): 
+    def forward(self, x, y, y_val=None): 
+        
+        if y_val is not None: 
+            y = torch.cat((y, y_val), dim=-1)
 
         if self.cnn is not None: 
             z = self.cnn(x)
@@ -33,7 +34,7 @@ class Estimator(torch.nn.Module):
             z = torch.cat((z, y), dim=1)
         
         out = self.f_out(z) 
-        return torch.sigmoid(out + self.b)
+        return torch.sigmoid(out)
 
 def weights_init(m, gain=1):
     if isinstance(m, torch.nn.Linear):
