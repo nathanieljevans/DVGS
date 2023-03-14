@@ -6,36 +6,34 @@ import numpy as np
 from data_loading import load_tabular_data
 
 sys.path.append('../src/')
-from NN import NN 
-from CNNAE import CNNAE
+from Estimator import Estimator
 from AE import AE
 import similarities
-from Estimator import Estimator
 
 
 ##################################
 # Experiment summary 
 ##################################
 
-summary="This experiment measures the ability of (2) methods for capturing exogenous noise in lincs l1000 data (high APC subset)"
+summary="This experiment measures the ability of (1) methods for data valuation on the LINCS L1000 dataset"
 
 #################
 # General params 
 #################
 
-# options: "adult", "blog", "cifar10", 'cifar10-unsupervised', 'lincs-hi-apc', 'lincs-hi-apc-target'
-dataset = "lincs-hi-apc"
+# options: "adult", "blog", "cifar10", 'cifar10-unsupervised', 'lincs-hi-apc-target'
+dataset = "lincs-hi-apc-target"
 
-encoder_model = None 
-transforms = None
+transforms = None 
+encoder_model = None
 
 # learning algorithm to use 
 model = AE(in_channels      = 978, 
            num_layers       = 2, 
-           hidden_channels  = 250, 
-           latent_channels  = 32,
+           hidden_channels  = 256, 
+           latent_channels  = 64,
            norm             = False, 
-           dropout          = 0., 
+           dropout          = 0.0, 
            act              = torch.nn.Mish)
 
 # label corruption of endogenous variable (y)
@@ -43,16 +41,16 @@ endog_noise = 0.
 
 # max guassian noise rate (standard deviation) in exogenous variable (x) 
 # each sample will be assigned a random gaussian std noise rate sampled from a uniform dist between [0, exog_noise]
-exog_noise = 5.
+exog_noise = 0.
 
 ## number of training/source observations 
-train_num = 20000 
+train_num = -1 
 
 # number of validation/target observations 
-valid_num = 2000
+valid_num = 5000
 
 # output paths 
-out_dir = '../results/exp8/'
+out_dir = '../results/exp10/'
 
 # whether to delete the data on disk after reading into memory 
 cleanup_data = False
@@ -75,13 +73,13 @@ filter_kwargs = {
                 "qs"            : np.linspace(0., 0.95, 10), 
 
                 # mini-batch size for SGD 
-                "batch_size"    : 500,
+                "batch_size"    : 1024,
 
                 # learning rate 
                 "lr"            : 1e-3, 
 
                 # number of training epochs 
-                "epochs"        : 300, 
+                "epochs"        : 50, 
 
                 # number of technical replicates at each quantile (re-init of model)
                 "repl"          : 1,
@@ -102,7 +100,6 @@ estimator = Estimator(xin               = 978,
                       norm              = False, 
                       dropout           = 0., 
                       act               = torch.nn.ReLU)
-
 dvrl_init = { 
                 "predictor"         : copy.deepcopy(model), 
                 "estimator"         : estimator, 
@@ -110,14 +107,15 @@ dvrl_init = {
                 "include_marginal"  : False
             }
 
+
 dvrl_run = { 
                 "perf_metric"            : 'r2', 
                 "crit_pred"              : torch.nn.MSELoss(), 
                 "outer_iter"             : 2000, 
                 "inner_iter"             : 100, 
-                "outer_batch"            : 5000, 
-                "inner_batch"            : 256, 
-                "estim_lr"               : 1e-2, 
+                "outer_batch"            : 10000, 
+                "inner_batch"            : 500, 
+                "estim_lr"               : 1e-3, 
                 "pred_lr"                : 1e-3, 
                 "moving_average_window"  : 100,
                 "fix_baseline"           : False,
@@ -132,12 +130,12 @@ dvrl_run = {
 dvgs_balance_class_weights = False
 
 # remove interim gradient similarities 
-dvgs_clean_gradient_sims = False
+dvgs_clean_gradient_sims = True
 
 dvgs_kwargs = { 
                 "target_crit"           : torch.nn.MSELoss(), 
                 "source_crit"           : torch.nn.MSELoss(),
-                "num_restarts"          : 3,
+                "num_restarts"          : 1,
                 "save_dir"              : f'{out_dir}/dvgs/',
                 "similarity"            : similarities.cosine_similarity(),
                 "optim"                 : torch.optim.Adam, 
@@ -145,7 +143,7 @@ dvgs_kwargs = {
                 "num_epochs"            : 500, 
                 "compute_every"         : 1, 
                 "source_batch_size"     : 250, 
-                "target_batch_size"     : 2500,
+                "target_batch_size"     : 5000,
                 "grad_params"           : None, 
                 "verbose"               : True, 
                 "use_cuda"              : True

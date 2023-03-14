@@ -152,7 +152,7 @@ class DVGS():
                             batch_grads = torch.cat([_g.view(y_source.size(0), -1) for _g, (n,p) in zip(ft_per_sample_grads, model.named_parameters()) if n in grad_params], dim=1)
                             batch_sim = similarity(grad_target.unsqueeze(0).expand(y_source.size(0), -1), batch_grads).detach().cpu()
                             data_vals[j:int(j + y_source.size(0))] = batch_sim 
-                            print(f'[batch:{kk}/{len(batches)}:{int(j/self.x_source.size(0)*100):<3}%]', end='\r')
+                            if verbose: print(f'[batch:{kk}/{len(batches)}:{int(j/self.x_source.size(0)*100):<3}%]', end='\r')
                             j += y_source.size(0)
                         nn += 1
                         np.save(f'{save_dir}/{self.run_id}/data_value_iter={nn}', data_vals)
@@ -166,10 +166,10 @@ class DVGS():
                     
                     ii += 1; kk += 1
 
-                print(' '*100, end='\r')
-                print(f'\t\t\t [restart: {_restart}] iteration {epoch} || avg target loss: {np.mean(losses):.2f} || gradient sim. calc. elapsed / sample: {np.mean(elapsed):.1f} us', end='\r')
+                if verbose: print(' '*100, end='\r')
+                if verbose: print(f'\t\t\t [restart: {_restart}] iteration {epoch} || avg target loss: {np.mean(losses):.2f} || gradient sim. calc. elapsed / sample: {np.mean(elapsed):.1f} us', end='\r')
 
-            print()
+            if verbose: print()
         return self.run_id
 
     def agg(self, path, reduction='mean'):

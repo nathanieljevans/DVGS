@@ -6,6 +6,8 @@ class LincsEmbNN(torch.nn.Module):
         ''''''
         super().__init__()
 
+        self.num_perts = num_perts 
+        self.num_lines = num_lines
         self.cell_embedding = torch.nn.Embedding(num_embeddings=num_lines, embedding_dim=cell_channels, scale_grad_by_freq=True, dtype=torch.float32)
         self.pert_embedding = torch.nn.Embedding(num_embeddings=num_perts, embedding_dim=pert_channels, scale_grad_by_freq=True, dtype=torch.float32)
         self.nn = NN(in_channels=cell_channels+pert_channels + 2, out_channels=out_channels, num_layers=num_layers, hidden_channels=hidden_channels, norm=norm, dropout=dropout, bias=bias, act=act, out_fn=None)

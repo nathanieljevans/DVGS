@@ -130,8 +130,18 @@ if __name__ == '__main__':
 
         print()
 
-        tic = time.time() 
         vals = dvrl.run(**config.dvrl_run, noise_labels=endog_noise).detach().cpu().numpy().ravel()
+
+    elif args.method == 'dvrl2': 
+
+        dvrl2 = DVRL2(x_train       = x_train,
+                        y_train       = y_train,
+                        x_valid       = x_valid,
+                        y_valid       = y_valid, **config.dvrl2_init)
+        
+        print()
+        
+        vals = dvrl2.run(**config.dvrl2_run, noise_labels=endog_noise).detach().cpu().numpy().ravel()
 
     elif args.method == 'dshap': 
 

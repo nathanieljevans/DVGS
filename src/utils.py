@@ -46,6 +46,7 @@ def load_data(dataset, train_num, valid_num, exog_noise=0., endog_noise=0., save
 
     if dataset in ['adult', 'blog']: 
         noise_idx = load_tabular_data(dataset, {'train':train_num, 'valid':valid_num}, noise_rate=endog_noise, out=save_dir) 
+
         x_train, y_train, x_valid, y_valid, x_test, y_test, col_names = preprocess_data(normalization='minmax', train_file_name='train.csv', valid_file_name='valid.csv', test_file_name='test.csv', data=save_dir)
 
         if clean_up: 
@@ -62,6 +63,7 @@ def load_data(dataset, train_num, valid_num, exog_noise=0., endog_noise=0., save
 
         endog_noise = np.zeros(x_train.size(0))
         endog_noise[noise_idx] = 1
+
 
     elif dataset in ['cifar10', 'cifar10-unsupervised']: 
         transform = transforms
