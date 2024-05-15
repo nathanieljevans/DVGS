@@ -1,18 +1,19 @@
 # Data Valuation with Gradient Similarity (DVGS)
 
+High-quality data is crucial for accurate machine learning and actionable analytics, however, mislabeled or noisy data is a common problem in many domains. Distinguishing low- from high-quality data can be challenging, often requiring expert knowledge and considerable manual intervention. Data Valuation algorithms are a class of methods that seek to quantify the value of each sample in a dataset based on its contribution or importance to a given predictive task. These data values have shown an impressive ability to identify mislabeled observations, and filtering low-value data can boost machine learning performance. In this work, we present a simple alternative to existing methods, termed Data Valuation with Gradient Similarity (DVGS). This approach can be easily applied to any gradient descent learning algorithm, scales well to large datasets, and performs comparably or better than baseline valuation methods for tasks such as corrupted label discovery and noise quantification. We evaluate the DVGS method on tabular, image and RNA expression datasets to show the effectiveness of the method across domains. Our approach has the ability to rapidly and accurately identify low-quality data, which can reduce the need for expert knowledge and manual intervention in data cleaning tasks.
 
-
-## environment 
-
-we recommend using the [mamba](https://mamba.readthedocs.io/en/latest/installation.html) package manager, although `conda` should also work.  
-
-```bash 
-$ mamba env create -f environment.yml
-$ conda activate dvgs 
-(dvgs) $
+```
+@misc{evans2024data,
+      title={Data Valuation with Gradient Similarity}, 
+      author={Nathaniel J. Evans and Gordon B. Mills and Guanming Wu and Xubo Song and Shannon McWeeney},
+      year={2024},
+      eprint={2405.08217},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
 ```
 
-## example notebook 
+## examples
 
 To explore dvgs, dvrl or dshap... use `example.ipynb` 
 
@@ -25,7 +26,6 @@ see `/configs` for details.
 ```
 
 ## `LINCS` data valuation 
-
 
 ```bash
 (dvgs) $ ./lincs_setup.sh 
