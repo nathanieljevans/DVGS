@@ -231,7 +231,9 @@ def get_corruption_scores(vals, noise_idx, train_size, noise_prop, n_scores=500)
     return pk, p_corr, p_perfect, p_random
 
 
-def get_filtered_scores(vals, model, crit, metric, x_train, y_train, x_test, y_test, qs=np.linspace(0., 0.5, 5), batch_size=256, lr=1e-3, epochs=200, repl=1, reset_params=True):
+def get_filtered_scores(vals, model, crit, metric, x_train, y_train, x_test, y_test, 
+                        qs=np.linspace(0., 0.5, 5), batch_size=256, lr=1e-3, epochs=200, 
+                        repl=1, reset_params=True, return_all_scores=False):
     ''''''
 
     remove_low_values = []
@@ -275,8 +277,12 @@ def get_filtered_scores(vals, model, crit, metric, x_train, y_train, x_test, y_t
             _low_res.append(remove_low_res)
             _high_res.append(remove_high_res)
 
-        remove_low_values.append(np.mean(_low_res))
-        remove_high_values.append(np.mean(_high_res))
+        if return_all_scores: 
+            remove_low_values.append(tuple(_low_res))
+            remove_high_values.append(tuple(_high_res))
+        else: 
+            remove_low_values.append(np.mean(_low_res))
+            remove_high_values.append(np.mean(_high_res))
     print()
 
     return remove_low_values, remove_high_values
@@ -291,6 +297,7 @@ def train_model(model, crit, metric, x_train, y_train, x_test, y_test, batch_siz
     if verbose: print('using device:', device)
 
     model = copy.deepcopy(model).to(device)
+    model = model.train()
     optim = torch.optim.Adam(model.parameters(), lr=lr)
 
     for epoch in range(epochs): 

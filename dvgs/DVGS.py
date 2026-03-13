@@ -60,7 +60,9 @@ class DVGS():
         dl= torch.cat([x.view(-1) for x in dl])
         return dl
 
-    def run(self, target_crit, source_crit, num_restarts=1, save_dir='./dvgs_results/', similarity=torch.nn.CosineSimilarity(dim=1), optim=torch.optim.Adam, lr=1e-2, num_epochs=100, compute_every=1, target_batch_size=512, source_batch_size=512, grad_params=None, verbose=True, use_cuda=True, uid=None): 
+    def run(self, target_crit, source_crit, num_restarts=1, save_dir='./dvgs_results/', similarity=torch.nn.CosineSimilarity(dim=1), 
+            optim=torch.optim.Adam, lr=1e-2, num_epochs=100, compute_every=1, target_batch_size=512, source_batch_size=512, 
+            grad_params=None, verbose=True, use_cuda=True, uid=None, wd=0.): 
         '''
         trains the model and returns data values 
 
@@ -91,7 +93,6 @@ class DVGS():
         mkdir(f'{save_dir}/{self.run_id}')
 
         model = self.model
-        #optim = optim(model.parameters(), lr=lr)
         
         # if no grad params are provided
         if grad_params is None: 
@@ -114,7 +115,7 @@ class DVGS():
         elapsed = []
         for _restart in range(num_restarts):
             model.reset_parameters() 
-            opt = optim(model.parameters(), lr=lr)
+            opt = optim(model.parameters(), lr=lr, weight_decay=wd)
 
             for epoch in range(num_epochs): 
                 losses = []

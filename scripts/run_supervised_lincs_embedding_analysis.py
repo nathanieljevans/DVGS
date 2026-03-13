@@ -25,7 +25,7 @@ from DVGS import DVGS
 from DVRL import DVRL
 from DShap import DShap
 from LOO import LOO
-from DVRL2 import DVRL2
+from deprecated.DVRL2 import DVRL2
 from LincsEmbNN import LincsEmbNN
 
 
