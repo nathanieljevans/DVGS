@@ -4,3 +4,6 @@
 */data_files
 */results
 /results
+
+/__pycache__
+/deprecated
