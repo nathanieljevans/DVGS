@@ -5,7 +5,7 @@
 import torch
 import numpy as np
 import time 
-from functorch import make_functional_with_buffers, vmap, grad
+from functorch import make_functional_with_buffers, grad
 from uuid import uuid4
 from os import listdir, mkdir
 from os.path import exists
@@ -227,10 +227,10 @@ def get_per_sample_grad_func(crit, fmodel, device):
         loss = crit(predictions, targets)
         return loss
 
-    ft_compute_grad = grad(compute_loss_stateless_model)
+    ft_compute_grad = torch.func.grad(compute_loss_stateless_model)
     
     if device == 'cpu': 
-        return vmap(ft_compute_grad, in_dims=(None, None, 0, 0), randomness='same')
+        return torch.vmap(ft_compute_grad, in_dims=(None, None, 0, 0), randomness='same')
     else: 
-        return vmap(ft_compute_grad, in_dims=(None, None, 0, 0), randomness='different')
+        return torch.vmap(ft_compute_grad, in_dims=(None, None, 0, 0), randomness='different')
 
