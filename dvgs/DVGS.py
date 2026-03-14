@@ -5,7 +5,6 @@
 import torch
 import numpy as np
 import time 
-from functorch import make_functional_with_buffers, grad
 from uuid import uuid4
 from os import listdir, mkdir
 from os.path import exists
@@ -143,14 +142,15 @@ class DVGS():
                         # step 2: for each source/train sample 
                         j = 0
                         # to speed up per-sample gradient calculations 
-                        fmodel, params, buffers = make_functional_with_buffers(model)
-                        ft_compute_sample_grad = get_per_sample_grad_func(source_crit, fmodel, device)
+                        params_and_buffers = {n: p for n, p in model.named_parameters()}
+                        params_and_buffers.update({n: b for n, b in model.named_buffers()})
+                        ft_compute_sample_grad = get_per_sample_grad_func(source_crit, model, device)
                         for idx_source in torch.split(torch.arange(self.x_source.size(0)), source_batch_size): 
                             x_source = self.x_source[idx_source, :]
                             y_source = self.y_source[idx_source, :]
                             x_source, y_source = myto(x_source, y_source, device)
-                            ft_per_sample_grads = ft_compute_sample_grad(params, buffers, x_source, y_source)
-                            batch_grads = torch.cat([_g.view(y_source.size(0), -1) for _g, (n,p) in zip(ft_per_sample_grads, model.named_parameters()) if n in grad_params], dim=1)
+                            ft_per_sample_grads = ft_compute_sample_grad(params_and_buffers, x_source, y_source)
+                            batch_grads = torch.cat([ft_per_sample_grads[n].view(y_source.size(0), -1) for n, p in model.named_parameters() if n in grad_params], dim=1)
                             batch_sim = similarity(grad_target.unsqueeze(0).expand(y_source.size(0), -1), batch_grads).detach().cpu()
                             data_vals[j:int(j + y_source.size(0))] = batch_sim 
                             if verbose: print(f'[batch:{kk}/{len(batches)}:{int(j/self.x_source.size(0)*100):<3}%]', end='\r')
@@ -213,24 +213,24 @@ def myto(x_valid, y_valid, device):
 
     return x_valid, y_valid
 
-def get_per_sample_grad_func(crit, fmodel, device): 
+def get_per_sample_grad_func(crit, model, device):
 
-    def compute_loss_stateless_model (params, buffers, sample, target):
+    def compute_loss_stateless_model(params_and_buffers, sample, target):
         if torch.is_tensor(sample):
             batch = sample.unsqueeze(0)
         else:
             # list of tensors, from LINCSDataset
-            batch = [el.unsqueeze(0) for el in sample] 
+            batch = [el.unsqueeze(0) for el in sample]
 
         targets = target.unsqueeze(0)
-        predictions = fmodel(params, buffers, batch) 
+        predictions = torch.func.functional_call(model, params_and_buffers, (batch,))
         loss = crit(predictions, targets)
         return loss
 
     ft_compute_grad = torch.func.grad(compute_loss_stateless_model)
-    
-    if device == 'cpu': 
-        return torch.vmap(ft_compute_grad, in_dims=(None, None, 0, 0), randomness='same')
-    else: 
-        return torch.vmap(ft_compute_grad, in_dims=(None, None, 0, 0), randomness='different')
+
+    if device == 'cpu':
+        return torch.vmap(ft_compute_grad, in_dims=(None, 0, 0), randomness='same')
+    else:
+        return torch.vmap(ft_compute_grad, in_dims=(None, 0, 0), randomness='different')
 
